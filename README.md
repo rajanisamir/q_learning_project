@@ -22,14 +22,16 @@
 ### Timeline
 _We aim to have components implemented by the following times:_
 
-Q-learning algorithm
+**Q-learning algorithm**
 - Executing the Q-learning algorithm: Wednesday, April 27th
 - Determining when the Q-matrix has converged: Thursday, April 28th
 - Once the Q-matrix has converged, how to determine which actions the robot should take to maximize expected reward: Saturday, April 30th
-Robot perception
+
+**Robot perception**
 - Determining the identities and locations of the three colored objects: Monday, May 2nd
 - Determining the identities and locations of the three AR tags: Tuesday, May 3rd
-Robot manipulation & movement
+
+**Robot manipulation & movement**
 - Picking up and putting down the colored objects with the OpenMANIPULATOR arm: Wednesday, May 4th
 - Navigating to the appropriate locations to pick up and put down the colored objects: Thursday, May 5th
 
