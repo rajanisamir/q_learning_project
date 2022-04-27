@@ -57,25 +57,40 @@ class QLearning(object):
         # Set up publishers and subscribers
         self.q_matrix_pub = rospy.Publisher(self.q_matrix_topic, QMatrix, queue_size=10) # publisher for Q-matrix
         self.robot_action_pub = rospy.Publisher(self.robot_action_topic, RobotMoveObjectToTag, queue_size=10) # publisher for robot action
-        self.reward_sub = rospy.Subscriber(self.reward_topic, QLearningReward, self.get_reward) # subscriber to reward topic
+        self.reward_sub = rospy.Subscriber(self.reward_topic, QLearningReward, self.reward_callback) # subscriber to reward topic
+
+        rospy.sleep(5)
+
+        print("slept")
 
         # Initialize parameters associated with Q-learning
         self.alpha = 1
         self.gamma = 0.8
         self.convergence_check_steps = 50
         self.convergence_threshold = 5
-        self.curr_reward = 0 
+        self.t = 0
+        self.curr_state = 0 
+        self.prev_q_matrix = None
 
         # initialize Q-matrix  
         self.initialize_q_matrix()
-        self.learn_q_matrix()
+
+        #self.learn_q_matrix()
 
         #print(self.q_matrix)
 
     # initializes the Q-matrix with dimensions corresponding with the number of states and actions
     def initialize_q_matrix(self):
+        #initialize to all -1
+        # go through action matrix 
         self.q_matrix = np.zeros((len(self.states), len(self.actions)))
         self.publish_q_matrix()
+
+        # choose an action at random and publish so then we get callback
+        possible_actions = filter(lambda elem: elem != -1, self.action_matrix[self.curr_state])
+        chosen_action = int(choice(list(possible_actions))) # TODO: FIGURE OUT WHY THIS IS A FLOAT
+        self.publish_action(self.actions[chosen_action])
+
     
     # publishes the Q-matrix
     def publish_q_matrix(self):
@@ -93,40 +108,58 @@ class QLearning(object):
         self.robot_action_pub.publish(action_stamped)
 
     # callback function for reward subscriber
-    def get_reward(self, data):
-        self.curr_reward = data.reward
+    def reward_callback(self, data):
+        print("callback called")
+        print("reward at", data.reward)
+        self.learn_q_matrix(data.reward)
+        #self.curr_reward = data.reward
 
     # determines if self.q_matrix has converged with prev_q_matrix
     def q_matrix_has_converged(self, prev_q_matrix):
         diff = abs(self.q_matrix - prev_q_matrix)
         return np.sum(diff) < self.convergence_threshold
 
+    #update current state 
+    def update_state(self, action):
+        for s, a in enumerate(self.action_matrix[self.curr_state]):
+            if a == action:
+                self.curr_state = s
+                print("updated state to", self.curr_state)
+
     # executes the Q-learning algorithm
-    def learn_q_matrix(self):
-        t = 0
-        prev_q_matrix = None
-        curr_state = 0
+    def learn_q_matrix(self, reward):
+        #t = 0
+        #prev_q_matrix = None
+        #curr_state = 0
         while True:
             # if sufficiently many steps have passed, check for convergence
-            if t % self.convergence_check_steps == 0:
-                if prev_q_matrix is not None and self.q_matrix_has_converged(prev_q_matrix):
+            if self.t % self.convergence_check_steps == 0:
+                if self.prev_q_matrix is not None and self.q_matrix_has_converged(self.prev_q_matrix):
                     break
-                prev_q_matrix = self.q_matrix
+                self.prev_q_matrix = self.q_matrix
 
             # choose an action at random
-            possible_actions = filter(lambda elem: elem != -1, self.action_matrix[curr_state])
+            possible_actions = filter(lambda elem: elem != -1, self.action_matrix[self.curr_state])
             chosen_action = int(choice(list(possible_actions))) # TODO: FIGURE OUT WHY THIS IS A FLOAT
             self.publish_action(self.actions[chosen_action])
             #self.robot_action_pub.publish(self.actions[chosen_action])
             
-            # get reward
-            self.q_matrix[curr_state][chosen_action] += self.alpha * (self.curr_reward + self.gamma * max(self.q_matrix[curr_state]) - self.q_matrix[curr_state][chosen_action])
+            #call update state
+            self.update_state(chosen_action)
+
+            #print("reward:", self.curr_reward)
+
+            # update matrix
+            self.q_matrix[self.curr_state][chosen_action] += self.alpha * (reward + self.gamma * max(self.q_matrix[self.curr_state]) - self.q_matrix[self.curr_state][chosen_action])
 
             # increment time step
-            t += 1
+            self.t += 1
 
             # publish q-matrix
             self.publish_q_matrix()
+        
+        print("finish learning at t=", self.t)
+        print(self.q_matrix)
 
     def save_q_matrix(self):
         # TODO: You'll want to save your q_matrix to a file once it is done to
@@ -135,3 +168,5 @@ class QLearning(object):
 
 if __name__ == "__main__":
     node = QLearning()
+
+    rospy.spin()
