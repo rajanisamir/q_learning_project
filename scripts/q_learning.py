@@ -64,12 +64,13 @@ class QLearning(object):
         self.gamma = 0.8
         self.convergence_check_steps = 50
         self.convergence_threshold = 5
+        self.curr_reward = 0 
 
         # initialize Q-matrix  
         self.initialize_q_matrix()
         self.learn_q_matrix()
 
-        print(self.q_matrix)
+        #print(self.q_matrix)
 
     # initializes the Q-matrix with dimensions corresponding with the number of states and actions
     def initialize_q_matrix(self):
@@ -82,6 +83,14 @@ class QLearning(object):
         q_matrix_stamped.header = Header(stamp=rospy.Time.now(), frame_id=self.q_matrix_topic)
         q_matrix_stamped.q_matrix = self.q_matrix.tolist()
         self.q_matrix_pub.publish(q_matrix_stamped)
+    
+    # publishes action to execute
+    def publish_action(self, action):
+        action_stamped = RobotMoveObjectToTag()
+        action_stamped.robot_object = action['object']
+        action_stamped.tag_id = action['tag']
+
+        self.robot_action_pub.publish(action_stamped)
 
     # callback function for reward subscriber
     def get_reward(self, data):
@@ -107,7 +116,8 @@ class QLearning(object):
             # choose an action at random
             possible_actions = filter(lambda elem: elem != -1, self.action_matrix[curr_state])
             chosen_action = int(choice(list(possible_actions))) # TODO: FIGURE OUT WHY THIS IS A FLOAT
-            self.robot_action_pub.publish(self.actions[chosen_action])
+            self.publish_action(self.actions[chosen_action])
+            #self.robot_action_pub.publish(self.actions[chosen_action])
             
             # get reward
             self.q_matrix[curr_state][chosen_action] += self.alpha * (self.curr_reward + self.gamma * max(self.q_matrix[curr_state]) - self.q_matrix[curr_state][chosen_action])
