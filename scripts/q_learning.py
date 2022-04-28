@@ -59,10 +59,13 @@ class QLearning(object):
         self.robot_action_pub = rospy.Publisher(self.robot_action_topic, RobotMoveObjectToTag, queue_size=10) # publisher for robot action
         self.reward_sub = rospy.Subscriber(self.reward_topic, QLearningReward, self.get_reward) # subscriber to reward topic
 
+        rospy.sleep(5)
+
+        print("slept")
         # Initialize parameters associated with Q-learning
         self.alpha = 1
         self.gamma = 0.8
-        self.convergence_check_steps = 50
+        self.convergence_check_steps = 100 #50
         self.convergence_threshold = 5
 
         # initialize Q-matrix  
@@ -81,12 +84,17 @@ class QLearning(object):
         q_matrix_stamped = QMatrix()
         q_matrix_stamped.header = Header(stamp=rospy.Time.now(), frame_id=self.q_matrix_topic)
         q_matrix_stamped.q_matrix = self.q_matrix.tolist()
+
+        #r = rospy.Rate(5)
+        #for i in range(0, 5):
+            #self.q_matrix_pub.publish(q_matrix_stamped)
+            #r.sleep()
         self.q_matrix_pub.publish(q_matrix_stamped)
         rospy.sleep(1)
 
     # callback function for reward subscriber
     def get_reward(self, data):
-        print("callback called")
+        #print("callback called")
         print("reward:", data.reward)
         self.curr_reward = data.reward
 
@@ -100,7 +108,10 @@ class QLearning(object):
         action_stamped = RobotMoveObjectToTag()
         action_stamped.robot_object = action['object']
         action_stamped.tag_id = action['tag']
-
+        #r = rospy.Rate(5)
+        #for i in range(0, 5):
+            #self.robot_action_pub.publish(action_stamped)
+            #r.sleep()
         self.robot_action_pub.publish(action_stamped)
         rospy.sleep(1)
     
@@ -108,9 +119,16 @@ class QLearning(object):
     def update_state(self, state, action):
         for s, a in enumerate(self.action_matrix[state]):
             if a == action:
-                print("updated state to", s)
+                print("state", s)
                 return s
 
+    def get_possible_actions(self, curr_state):
+        possible_actions = []
+        for action in self.action_matrix[curr_state]:
+            if action != -1:
+                possible_actions.append(action)
+        return possible_actions
+            
     # executes the Q-learning algorithm
     def learn_q_matrix(self):
         t = 0
@@ -122,11 +140,22 @@ class QLearning(object):
                 if prev_q_matrix is not None and self.q_matrix_has_converged(prev_q_matrix):
                     break
                 prev_q_matrix = self.q_matrix
+                print("matrix so far")
+                print(self.q_matrix)
 
             # choose an action at random
-            possible_actions = filter(lambda elem: elem != -1, self.action_matrix[curr_state])
-            print("possible:", list(possible_actions))
-            chosen_action = int(choice(list(possible_actions)))
+            #possible_actions = filter(lambda elem: elem != -1, self.action_matrix[curr_state])
+            possible_actions = self.get_possible_actions(curr_state)
+            print("possible:", possible_actions)
+            #print("possible2:", list(possible_actions))
+            if len(possible_actions) == 0:
+                print("all possible = -1")
+                curr_state = 0
+                #possible_actions = filter(lambda elem: elem != -1, self.action_matrix[curr_state])
+                possible_actions = self.get_possible_actions(curr_state)
+
+            chosen_action = int(choice(possible_actions))
+            print("executing action", chosen_action)
             self.publish_action(self.actions[chosen_action])
 
             updated_state = self.update_state(curr_state, chosen_action)
@@ -134,18 +163,19 @@ class QLearning(object):
             # update q_matrix
             self.q_matrix[curr_state][chosen_action] += self.alpha * (self.curr_reward + self.gamma * max(self.q_matrix[updated_state]) - self.q_matrix[curr_state][chosen_action])
             
+            print("t:", t)
             print("updated q:", self.q_matrix[curr_state][chosen_action])
             # increment time step
             t += 1
 
             #update state
             curr_state = updated_state
+            print("updated state to", curr_state)
 
             # publish q-matrix
             self.publish_q_matrix()
         
         print("done")
-        print(self.q_matrix)
 
     def save_q_matrix(self):
         # TODO: You'll want to save your q_matrix to a file once it is done to
