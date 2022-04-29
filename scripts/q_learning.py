@@ -69,9 +69,10 @@ class QLearning(object):
         self.convergence_check_threshold = 5000
         self.convergence_threshold = 5
 
-        # initialize Q-matrix  
+        # initialize, learn, and save Q-matrix  
         self.initialize_q_matrix()
         self.learn_q_matrix()
+        self.save_q_matrix()
 
     # initializes the Q-matrix with dimensions corresponding with the number of states and actions
     def initialize_q_matrix(self):
@@ -170,11 +171,10 @@ class QLearning(object):
             self.publish_q_matrix()
         
         print("done")
+        print(self.q_matrix)
 
     def save_q_matrix(self):
-        # TODO: You'll want to save your q_matrix to a file once it is done to
-        # avoid retraining
-        return
+        np.savetxt('q_matrix.csv', self.q_matrix, fmt='%.2f', delimiter=',')
 
 if __name__ == "__main__":
     node = QLearning()
