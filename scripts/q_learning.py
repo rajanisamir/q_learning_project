@@ -65,14 +65,13 @@ class QLearning(object):
         # Initialize parameters associated with Q-learning
         self.alpha = 1
         self.gamma = 0.8
-        self.convergence_check_steps = 100 #50
+        # self.convergence_check_steps = 100 #50
+        self.convergence_check_threshold = 5000
         self.convergence_threshold = 5
 
         # initialize Q-matrix  
         self.initialize_q_matrix()
         self.learn_q_matrix()
-
-        print(self.q_matrix)
 
     # initializes the Q-matrix with dimensions corresponding with the number of states and actions
     def initialize_q_matrix(self):
@@ -85,17 +84,11 @@ class QLearning(object):
         q_matrix_stamped.header = Header(stamp=rospy.Time.now(), frame_id=self.q_matrix_topic)
         q_matrix_stamped.q_matrix = self.q_matrix.tolist()
 
-        #r = rospy.Rate(5)
-        #for i in range(0, 5):
-            #self.q_matrix_pub.publish(q_matrix_stamped)
-            #r.sleep()
         self.q_matrix_pub.publish(q_matrix_stamped)
-        rospy.sleep(1)
 
     # callback function for reward subscriber
     def get_reward(self, data):
-        #print("callback called")
-        print("reward:", data.reward)
+        print("Received reward: ", data.reward)
         self.curr_reward = data.reward
 
     # determines if self.q_matrix has converged with prev_q_matrix
@@ -108,12 +101,7 @@ class QLearning(object):
         action_stamped = RobotMoveObjectToTag()
         action_stamped.robot_object = action['object']
         action_stamped.tag_id = action['tag']
-        #r = rospy.Rate(5)
-        #for i in range(0, 5):
-            #self.robot_action_pub.publish(action_stamped)
-            #r.sleep()
         self.robot_action_pub.publish(action_stamped)
-        rospy.sleep(1)
     
     #update current state 
     def update_state(self, state, action):
@@ -134,43 +122,49 @@ class QLearning(object):
         t = 0
         prev_q_matrix = None
         curr_state = 0
+        self.curr_reward = None
+        self.total_reward = 0
         while True:
             # if sufficiently many steps have passed, check for convergence
-            if t % self.convergence_check_steps == 0:
+            if self.total_reward > 5000:
                 if prev_q_matrix is not None and self.q_matrix_has_converged(prev_q_matrix):
                     break
                 prev_q_matrix = self.q_matrix
-                print("matrix so far")
-                print(self.q_matrix)
+                self.total_reward = 0
+
+                print("Unconverged Matrix: ", self.q_matrix)
 
             # choose an action at random
-            #possible_actions = filter(lambda elem: elem != -1, self.action_matrix[curr_state])
             possible_actions = self.get_possible_actions(curr_state)
-            print("possible:", possible_actions)
-            #print("possible2:", list(possible_actions))
+            print("Possible Actions: ", possible_actions)
             if len(possible_actions) == 0:
-                print("all possible = -1")
+                print("No Possible Actions... Resetting State")
                 curr_state = 0
-                #possible_actions = filter(lambda elem: elem != -1, self.action_matrix[curr_state])
                 possible_actions = self.get_possible_actions(curr_state)
 
             chosen_action = int(choice(possible_actions))
-            print("executing action", chosen_action)
+            print("Executing Action: ", chosen_action)
             self.publish_action(self.actions[chosen_action])
 
             updated_state = self.update_state(curr_state, chosen_action)
-            
+
+            while self.curr_reward is None:
+                pass
+
             # update q_matrix
             self.q_matrix[curr_state][chosen_action] += self.alpha * (self.curr_reward + self.gamma * max(self.q_matrix[updated_state]) - self.q_matrix[curr_state][chosen_action])
             
-            print("t:", t)
-            print("updated q:", self.q_matrix[curr_state][chosen_action])
+            self.total_reward += self.curr_reward
+            self.curr_reward = None
+            
+            print("t: ", t)
+            print("Updated q: ", self.q_matrix[curr_state][chosen_action])
             # increment time step
             t += 1
 
             #update state
             curr_state = updated_state
-            print("updated state to", curr_state)
+            print("updated state to ", curr_state)
 
             # publish q-matrix
             self.publish_q_matrix()
