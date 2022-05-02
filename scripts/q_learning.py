@@ -81,7 +81,7 @@ class QLearning(object):
 
     # initializes the Q-matrix with dimensions corresponding with the number of states and actions
     def initialize_q_matrix(self):
-        self.q_matrix = np.zeros((len(self.states), len(self.actions)))
+        self.q_matrix = np.zeros((len(self.states), len(self.actions)), dtype=(np.int16, np.int16))
         self.publish_q_matrix()
     
     # publishes the current Q-matrix
@@ -89,7 +89,12 @@ class QLearning(object):
         # add header to Q-matrix containing a timestamp and ID
         q_matrix_stamped = QMatrix()
         q_matrix_stamped.header = Header(stamp=rospy.Time.now(), frame_id=self.q_matrix_topic)
-        q_matrix_stamped.q_matrix = self.q_matrix.tolist()
+        q_matrix_stamped.q_matrix = []
+        for row in self.q_matrix:
+            q_matrix_row = QMatrixRow(row.tolist())
+            q_matrix_stamped.q_matrix.append(q_matrix_row)
+
+        #q_matrix_stamped.q_matrix = self.q_matrix.tolist()
 
         self.q_matrix_pub.publish(q_matrix_stamped)
 
