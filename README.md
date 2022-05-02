@@ -5,7 +5,7 @@
 ## Implementation Plan
 
 ### Objectives Description
-The goal of this project is to program the robot to perceive, interact with, and organize items in its environment through a reinforcement learning model, using the Q-learning algorithm. This should be accomplished by first iterating through the Q-learning algorithm in order to generate a converged Q-matrix, and then using this matrix to guide the robot to pick up colored objects and place them in from AR tags in order to maximize the future rewards of its actions. The robot should be able to distinguish between and determine the positions of both the colored objects and the QR tags.
+The goal of this project is to program the robot to perceive, interact with, and organize items in its environment through a reinforcement learning model, using the Q-learning algorithm. The code should execute the Q-learning algorithm in order to generate a converged Q-matrix, and it should be able to use this matrix to guide the robot to pick up colored objects and place them in front of AR tags in order to maximize the future rewards of its actions. In doing this, the robot should be able to distinguish between and determine the positions of both the colored objects and the AR tags.
 
 ### Team Members: Samir Rajani and Jason Chee
 
