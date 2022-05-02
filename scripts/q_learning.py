@@ -71,7 +71,7 @@ class QLearning(object):
             #   the Q-matrix at the previous convergence check below which the Q-matrix will be considered to have converged
         self.alpha = 1
         self.gamma = 0.8
-        self.convergence_check_threshold = 1500
+        self.convergence_check_threshold = 10000
         self.convergence_threshold = 5
 
         # Initialize, learn, and save Q-matrix  
@@ -166,7 +166,7 @@ class QLearning(object):
             t += 1
             curr_state = updated_state
 
-            # Publish q-matrix
+            # Publish Q-matrix
             self.publish_q_matrix()
         
     def save_q_matrix(self):
