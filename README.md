@@ -7,6 +7,13 @@
 ### Objectives Description
 The goal of this project is to program the robot to perceive, interact with, and organize items in its environment through a reinforcement learning model, using the Q-learning algorithm. The code should execute the Q-learning algorithm in order to generate a converged Q-matrix, and it should be able to use this matrix to guide the robot to pick up colored objects and place them in front of AR tags in order to maximize the future rewards of its actions. In doing this, the robot should be able to distinguish between and determine the positions of both the colored objects and the AR tags.
 
+### High-Level Description
+To determine which colored objects belonged in front of each AR tag, we generated a Q-matrix to track the quality of taking each available action in each possible state.
+
+ADD HIGH-LEVEL DESCRIPTION OF HOW ALGORITHM WORKS
+
+After learning the Q-matrix, to determine which action to take (i.e. which colored object to place in front of each AR tag), we looked up the action (column) with the highest Q-value for our state, and executed that action, which maximized the expected future reward.
+
 ### Team Members: Samir Rajani and Jason Chee
 
 ### Descriptions of Components
