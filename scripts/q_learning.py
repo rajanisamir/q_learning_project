@@ -79,23 +79,25 @@ class QLearning(object):
         self.learn_q_matrix()
         self.save_q_matrix()
 
-    # initializes the Q-matrix with dimensions corresponding with the number of states and actions
+    # initializes the Q-matrix with dimensions corresponding with the number of states and actions; publish it
     def initialize_q_matrix(self):
         self.q_matrix = np.zeros((len(self.states), len(self.actions)), dtype=(np.int16, np.int16))
         self.publish_q_matrix()
     
     # publishes the current Q-matrix
     def publish_q_matrix(self):
-        # add header to Q-matrix containing a timestamp and ID
         q_matrix_stamped = QMatrix()
+
+        # add header to Q-matrix object containing a timestamp and ID
         q_matrix_stamped.header = Header(stamp=rospy.Time.now(), frame_id=self.q_matrix_topic)
+
+        # build Q-matrix by converting rows of Q-matrix from numpy arrays to QMatrixRow objects
         q_matrix_stamped.q_matrix = []
         for row in self.q_matrix:
             q_matrix_row = QMatrixRow(row.tolist())
             q_matrix_stamped.q_matrix.append(q_matrix_row)
 
-        #q_matrix_stamped.q_matrix = self.q_matrix.tolist()
-
+        # publish stamped Q-matrix
         self.q_matrix_pub.publish(q_matrix_stamped)
 
     # Callback function for the reward subscriber, which sets self.current_reward to the received reward
@@ -105,12 +107,13 @@ class QLearning(object):
     # Determines if self.q_matrix has converged with prev_q_matrix
     def q_matrix_has_converged(self, prev_q_matrix):
         # Computes the sum of the element-wise absolute difference between current Q-matrix and previous Q-matrix;
-        #   return if the sum is below the convergence threshold
+        #   return True if the sum is below the convergence threshold and False otherwise
         diff = abs(self.q_matrix - prev_q_matrix)
         return np.sum(diff) < self.convergence_threshold
 
     # Publishes a specified action for the robot to execute
     def publish_action(self, action):
+        # Pull action object and tag from passed dictionary, and then publish it
         action_stamped = RobotMoveObjectToTag()
         action_stamped.robot_object = action['object']
         action_stamped.tag_id = action['tag']
@@ -118,6 +121,7 @@ class QLearning(object):
     
     # Returns the state associated with taking a specified action from a specified state
     def get_state(self, state, action):
+        # Search for the action in the row of action matrix corresponding with the specified initial state; return its index
         for s, a in enumerate(self.action_matrix[state]):
             if a == action:
                 return s
@@ -125,45 +129,60 @@ class QLearning(object):
     # Returns a list of actions possible from a specified state
     def get_possible_actions(self, state):
         possible_actions = []
+
+        # Append all valid actions from current state (actions which are not -1 in the action matrix) to possible_actions
         for action in self.action_matrix[state]:
             if action != -1:
                 possible_actions.append(action)
+
         return possible_actions
             
     # Executes the Q-learning algorithm
     def learn_q_matrix(self):
+        # Initialize timestep, previous Q-matrix (for checking for convergence), the current state, the current reward
+        #   sum, and the current reward.
         t = 0
         prev_q_matrix = None
         curr_state = 0
         curr_reward_sum = 0
         self.curr_reward = None
 
+        # Continually choose an action, receive a reward, and update the Q-matrix, until the matrix has converged.
         while True:
+
             # If the sum of the rewards received since the last convergence check exceeds a threshold,
-            #   check for convergence.
+            #   check for convergence
             if curr_reward_sum > self.convergence_check_threshold:
+
+                # If there has been a previous convergence check, check for convergence with prev_q_matrix, and
+                #   break from the loop if the Q-matrix has converged
                 if prev_q_matrix is not None and self.q_matrix_has_converged(prev_q_matrix):
                     break
+                
+                # If the convergnce check fails or if there is no prev_q_matrix to compare with, set prev_q_matrix
+                #   for the next convergence check, and reset the reward sum
                 prev_q_matrix = self.q_matrix
                 curr_reward_sum = 0
 
-            # Choose and publish an action at random; reset the state to 0 if there are none available.
+            # Choose and publish an action at random; reset the state to 0 if there are none available. Then, update
+            #   the robot's state.
             possible_actions = self.get_possible_actions(curr_state)
             if len(possible_actions) == 0:
                 curr_state = 0
                 possible_actions = self.get_possible_actions(curr_state)
             chosen_action = int(choice(possible_actions))
             self.publish_action(self.actions[chosen_action])
-
             updated_state = self.get_state(curr_state, chosen_action)
 
+            # Wait for reward to be populated by registered callback.
             while self.curr_reward is None:
                 pass
 
-            # Update Q-matrix using the formula
+            # Update Q-matrix using the Q-learning formula
             self.q_matrix[curr_state][chosen_action] += self.alpha * (self.curr_reward + \
                 self.gamma * max(self.q_matrix[updated_state]) - self.q_matrix[curr_state][chosen_action])
             
+            # Add to the reward sum, and reset self.curr_reward to None for the next iteration
             curr_reward_sum += self.curr_reward
             self.curr_reward = None
             
@@ -173,7 +192,8 @@ class QLearning(object):
 
             # Publish Q-matrix
             self.publish_q_matrix()
-        
+    
+    # Saves the Q-matrix to a csv file
     def save_q_matrix(self):
         np.savetxt('q_matrix.csv', self.q_matrix, fmt='%.2f', delimiter=',')
 
