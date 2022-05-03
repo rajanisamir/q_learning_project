@@ -2,19 +2,28 @@
 
 ## Writeup
 
-## Implementation Plan
-
 ### Objectives Description
 The goal of this project is to program the robot to perceive, interact with, and organize items in its environment through a reinforcement learning model, using the Q-learning algorithm. The code should execute the Q-learning algorithm in order to generate a converged Q-matrix, and it should be able to use this matrix to guide the robot to pick up colored objects and place them in front of AR tags in order to maximize the future rewards of its actions. In doing this, the robot should be able to distinguish between and determine the positions of both the colored objects and the AR tags.
 
 ### High-Level Description
 To determine which colored objects belonged in front of each AR tag, we generated a Q-matrix to track the quality of taking each available action in each possible state. We first initialized a Q-matrix in which the rows corresponded with robot states and columns corresponded with actions. We then followed the steps outlined in the Q-learning algorithm, initializing a time step and current state to 0, and taking actions (on the simulated robot) within a loop until the Q-matrix converged. From the current state, an action is executed, and the received reward is used to update the cell in the Q-matrix corresponding with the current state and the executed action using the Q-learning formula. Once a specified amount of rewards have been received, we check if our Q-matrix has converged by taking the sum of the element-wise absolute differences between the current Q-matrix and the Q-matrix at the previous convergence check and comparing it to a threshold. Once the Q-matrix has converged, iterations are stopped. After learning the Q-matrix, to determine which action to take (i.e. which colored object to place in front of each AR tag), we looked up the action (column) with the highest Q-value for our state, and executed that action, which maximized the expected future reward.
 
-### Q_Learning Algorithm Description
+### Q-Learning Algorithm Description
 - Selecting and executing actions for the robot (or phantom robot) to take
-  - We use the action_matrix to randomly select and execute actions for the robot (or phantom robot) to take. This occurs in our learn_q_function. We take a look at the current state in the action_matrix which corresponds to the matrix's row. We then filter the actions in that row that aren't -1 using get_possible_actions function, which returns a list of the possible actions corresponding to the specified state.  We use the numpy random choice function to randomly select what action to take out of those possible actions. We then execute our action using our publish_action() function, which takes an action dictionary as a parameter. We get this input from self.actions, which is a list of dictionaries, and our chosen action would be an index (self.actions[chosen_action]). The publish_action() function gets a RobotMoveObjectToTag object from our chosen action dictionary input and publishes it to the \q_learning\robot_action topic. Note, if there are no possible actions available for our current state, then we reset our current state back to 0 and again choose possible actions from that. 
+> The code for this component is located in the `learn_q_matrix` function, which in turn calls the functions `get_possible_actions`, `publish_action`, and `get_state`.
+> For each iteration of the loop in `learn_q_matrix`, we call a helper function `get_possible_actions`, which returns a list of possible actions from the current state based on the provided `action_matrix`. If there are no possible actions, we reset the state to 0 and refresh the possible actions. We then randomly select an action from the list using `numpy.random.choice`, and we publish the action to the robot using `self.publish_action`, a helper function that initializes and publishes an appropriate `RobotMoveObjectToTag` message to the `\q_learning\robot_action` topic, constructing the message from a passed action dictionary parameter. We get this parameter by retrieving the value of `self.actions`, a list of such dictionaries, at the index corresponding with the action we are taking. Finally, we update the state by calling `get_state`, a helper function that retrieves the state associated with taking a specified action from a specified state by iterating through the state's row in the action matrix and returning the index for which the action matches the passed action.
+
+- Updating the Q-matrix
+> 
+
+- Determining when to stop iterating through the Q-learning algorithm
+> 
+
+- Executing the path most likely to lead to receiving a reward after the Q-matrix has converged on the simulated Turtlebot3 robot
+> Due next week
 
 
+## Implementation Plan
 
 ### Team Members: Samir Rajani and Jason Chee
 
