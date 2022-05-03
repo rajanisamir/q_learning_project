@@ -11,13 +11,18 @@ To determine which colored objects belonged in front of each AR tag, we generate
 ### Q-Learning Algorithm Description
 - Selecting and executing actions for the robot (or phantom robot) to take
 > The code for this component is located in the `learn_q_matrix` function, which in turn calls the functions `get_possible_actions`, `publish_action`, and `get_state`.
+
 > For each iteration of the loop in `learn_q_matrix`, we call a helper function `get_possible_actions`, which returns a list of possible actions from the current state based on the provided `action_matrix`. If there are no possible actions, we reset the state to 0 and refresh the possible actions. We then randomly select an action from the list using `numpy.random.choice`, and we publish the action to the robot using `self.publish_action`, a helper function that initializes and publishes an appropriate `RobotMoveObjectToTag` message to the `\q_learning\robot_action` topic, constructing the message from a passed action dictionary parameter. We get this parameter by retrieving the value of `self.actions`, a list of such dictionaries, at the index corresponding with the action we are taking. Finally, we update the state by calling `get_state`, a helper function that retrieves the state associated with taking a specified action from a specified state by iterating through the state's row in the action matrix and returning the index for which the action matches the passed action.
 
 - Updating the Q-matrix
-> 
+> The code for this component is located in the `learn_q_matrix` function, and uses the callback `get_reward`, which is registered to the reward subscriber.
+
+> First, we wait to receive the reward from our executed action by repeatedly checking to see if `self.curr_reward` has been populated. This property gets set by the `get_reward` callback, which is registered to the reward subscriber, and simply sets `self.curr_reward` to the received reward. Then, we update the Q-matrix using the update formula, which increments the matrix element corresponding with the current state and action by the sum of the received reward and the discount-scaled difference between the maximum quality across all actions in the new state and the quality for the current action and state, all scaled by the learning rate. The discount factor gamma and learning rate alpha are set to 0.8 and 1, respectively, in the constructor for the `QLearning` class. Finally, we set `self.curr_reward` to `None` so that the next iteration can wait for it to be populated.
 
 - Determining when to stop iterating through the Q-learning algorithm
-> 
+> The code for this component is located at the beginning of the loop in the `learn_q_matrix` function, which also uses the helper function `q_matrix_has_converged`.
+
+> In each iteration of the loop in `learn_q_matrix`, we increment `curr_reward_sum`, the sum of the rewards received since the last convergence check. At the beginning of each loop iteration, if `curr_reward_sum` exceeds a threshold specified in the constructor for the `QLearning` class, which we set to 10,000, we check for convergence. First, we check if there has been a previous convergence check; if there has not, we set `prev_q_matrix` to the current Q-matrix, reset the reward sum, and wait for the next convergence check. If there has been a previous convergence check, `prev_q_matrix` will have been set to the Q-matrix at that time. In this case, we call the `q_matrix_has_converged` helper function, passing in `prev_q_matrix`. This function computes the sum of the element-wise absolute difference between current Q-matrix and previous Q-matrix and returns a Boolean value corresponding with whether the sum is below the convergence threshold specified in the constructor for the `QLearning` class, which we set to 5. If the Q-matrix has converged, we stop iterating; otherwise, we set `prev_q_matrix` to the current Q-matrix, reset the reward sum, and wait for the next convergence check.
 
 - Executing the path most likely to lead to receiving a reward after the Q-matrix has converged on the simulated Turtlebot3 robot
 > Due next week
