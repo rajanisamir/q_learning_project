@@ -41,6 +41,9 @@ class PerformActions(object):
         # Set up subscriber for robot actions
         rospy.Subscriber("/robot_action", RobotMoveObjectToTag, self.perform_action)
 
+        # Set up publisher for action completion
+        self.action_completion_pub = rospy.Publisher("/robot_action_completed", RobotMoveObjectToTag, queue_size=10)
+
         # Set up publisher for robot arm actions
         self.arm_action_pub = rospy.Publisher("/robot_arm_action", RobotArmAction, queue_size=10)
 
@@ -136,17 +139,20 @@ class PerformActions(object):
        
         # Pick up object
         self.arm_action_pub.publish("pick_up")
-        rospy.sleep(10) # change this depending on how long it takes to pick up an object, or create action completion pub
+        print('started picking up')
+        rospy.sleep(18) # change this depending on how long it takes to pick up an object, or create action completion pub
         
         
         # TODO: Move to tag
 
         # Put down object
         self.arm_action_pub.publish("put_down")
-        rospy.sleep(10) # change this depending on how long it takes to put down an object, or create action completion pub
+        print('started putting down')
+        rospy.sleep(18) # change this depending on how long it takes to put down an object, or create action completion pub
         
+        print('setting previous action completed')
 
-        send_actions.action_completed = True
+        self.action_completion_pub.publish(data)
 
         
     def run(self):
@@ -155,5 +161,6 @@ class PerformActions(object):
 
 
 if __name__ == '__main__':
+
     perform_actions_node = PerformActions()
     perform_actions_node.run()

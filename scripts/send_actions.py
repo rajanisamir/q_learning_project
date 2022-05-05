@@ -8,8 +8,6 @@ import os
 # Path of directory on where this file is located
 path_prefix = os.path.dirname(__file__) + "/action_states/"
 
-action_completed = False
-
 class SendActions(object):
     
     def __init__(self):
@@ -19,6 +17,7 @@ class SendActions(object):
 
         # Set up publisher for moving objects to a tag
         self.action_pub = rospy.Publisher("/robot_action", RobotMoveObjectToTag, queue_size=10)
+        self.action_completion_sub = rospy.Subscriber("/robot_action_completed", RobotMoveObjectToTag, self.set_prev_action_completed)
 
         # Allow publisher time to set up
         rospy.sleep(1)
@@ -29,7 +28,7 @@ class SendActions(object):
         # Load action matrix from txt file
         self.action_matrix = np.loadtxt(path_prefix + "action_matrix.txt")
 
-        # Track whether the previous action has been completed
+        # Track whether the previous action was completed
         self.prev_action_completed = True
 
         # Fetch self.actions, which is an array of dictionaries where the row index corresponds
@@ -40,6 +39,10 @@ class SendActions(object):
             lambda x: {"object": colors[int(x[0])], "tag": int(x[1])},
             self.actions
         ))
+
+    def set_prev_action_completed(self, data):
+
+        self.prev_action_completed = True
 
     # Publishes a specified action for the robot to execute
     def publish_action(self, action):
@@ -55,7 +58,7 @@ class SendActions(object):
         for s, a in enumerate(self.action_matrix[state]):
             if a == action:
                 return s
-        
+
     def run(self):
         
         # initialize state to 0
@@ -64,8 +67,12 @@ class SendActions(object):
         while np.max(self.q_matrix[state]) > 0:
 
             # wait for previous action to be completed
+            print('waiting for previous action to be completed')
+
             while not self.prev_action_completed:
                 pass
+
+            print('previous action marked as completed')
 
             # find action in Q-matrix row corresponding with the current state with the largest reward
             optimal_action_idx = np.argmax(self.q_matrix[state])
@@ -74,6 +81,8 @@ class SendActions(object):
             # publish the optimal action
             self.publish_action(optimal_action)
             self.prev_action_completed = False
+
+            print(f"publishing action {optimal_action}")
 
             # set new state based on action taken
             state = self.get_state(state, optimal_action_idx)
