@@ -15,7 +15,7 @@ class Robot(object):
     def __init__(self):
 
         # initialize this node
-        rospy.init_node('turtlebot3_dance')
+        rospy.init_node('perform_arm_actions')
 
         # the interface to the group of joints making up the turtlebot3
         # openmanipulator arm
@@ -89,6 +89,7 @@ class Robot(object):
             rospy.sleep(4)
 
     def reset_arm_position(self):
+
         joint_goal = self.positions['reset']
 
         arm_joint_goal = joint_goal["arm_joint_goal"]
@@ -106,6 +107,7 @@ class Robot(object):
         rospy.sleep(4)
 
     def run(self):
+
         self.reset_arm_position()
         rospy.spin()
 
