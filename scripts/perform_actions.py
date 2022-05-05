@@ -14,30 +14,6 @@ class PerformActions(object):
         # Initialize this node
         rospy.init_node('perform_actions')
 
-        # set up ROS / OpenCV bridge
-        self.bridge = cv_bridge.CvBridge()
-
-        # initalize the debugging window
-        #cv2.namedWindow("window", 1)
-
-        # Set up subscriber for robot actions
-        rospy.Subscriber("/robot_action", RobotMoveObjectToTag, self.perform_action)
-
-        # Set up publisher for robot arm actions
-        self.arm_action_pub = rospy.Publisher("/robot_arm_action", RobotArmAction, queue_size=10)
-
-        # Set up publisher for robot movement
-        self.move_pub = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
-
-        # Set up subscriber to robot's RGB camera  
-        self.image_sub = rospy.Subscriber('camera/rgb/image_raw', Image, self.image_callback)
-
-        # Set up subscriber for LIDAR scan
-        self.scan_sub = rospy.Subscriber('/scan', LaserScan, self.scan_callback)
-        
-        # Allow publishers/subscribers time to set up
-        rospy.sleep(1)
-
         #initialize parameters
         self.color = None
         self.tag_id = None
@@ -56,6 +32,29 @@ class PerformActions(object):
         #lidar scan closest obj distance
         self.closest = None
 
+        # set up ROS / OpenCV bridge
+        self.bridge = cv_bridge.CvBridge()
+
+        # initalize the debugging window
+        cv2.namedWindow("window", 1)
+
+        # Set up subscriber for robot actions
+        rospy.Subscriber("/robot_action", RobotMoveObjectToTag, self.perform_action)
+
+        # Set up publisher for robot arm actions
+        self.arm_action_pub = rospy.Publisher("/robot_arm_action", RobotArmAction, queue_size=10)
+
+        # Set up publisher for robot movement
+        self.move_pub = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
+        # Set up subscriber to robot's RGB camera  
+        self.image_sub = rospy.Subscriber('camera/rgb/image_raw', Image, self.image_callback)
+        # Set up subscriber for LIDAR scan
+        self.scan_sub = rospy.Subscriber('/scan', LaserScan, self.scan_callback)
+        
+        # Allow publishers/subscribers time to set up
+        rospy.sleep(1)
+
+
     def scan_callback(self, data):
         closest = 5
         front = data.ranges[0:30] + data.ranges[330:360]
@@ -65,9 +64,10 @@ class PerformActions(object):
             self.closest = min(front)
         
     def color_object_handler(self, img):
+        self.color = "pink"
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        lower_bound = self.color_dict_HSV[self.color[1]]
-        upper_bound = self.color_dict_HSV[self.color[0]]
+        lower_bound = np.array(self.color_dict_HSV[self.color][1])
+        upper_bound = np.array(self.color_dict_HSV[self.color][0])
         # this erases all pixels that aren't our color
         mask = cv2.inRange(hsv, lower_bound, upper_bound)
 
@@ -90,7 +90,7 @@ class PerformActions(object):
                 cv2.circle(img, (cx, cy), 20, (0,0,255), -1)
 
                 #if close enough to color object, update status and stop
-                if self.closest <= 0.2:
+                if self.closest is not None and self.closest <= 0.2:
                     #update status
                     self.go_to_color = False
                     self.pick_up_color = True
@@ -133,19 +133,18 @@ class PerformActions(object):
 
         # TODO: Move to colored object (maybe sleep here so that have time for robot to go to object)
 
-        if self.at_color_object:
-            # Pick up object
-            self.arm_action_pub.publish("pick_up")
-            rospy.sleep(10) # change this depending on how long it takes to pick up an object, or create action completion pub
-            return
+       
+        # Pick up object
+        self.arm_action_pub.publish("pick_up")
+        rospy.sleep(10) # change this depending on how long it takes to pick up an object, or create action completion pub
+        
         
         # TODO: Move to tag
 
-        if self.at_tag:
-            # Put down object
-            self.arm_action_pub.publish("put_down")
-            rospy.sleep(10) # change this depending on how long it takes to put down an object, or create action completion pub
-            return
+        # Put down object
+        self.arm_action_pub.publish("put_down")
+        rospy.sleep(10) # change this depending on how long it takes to put down an object, or create action completion pub
+        
 
         send_actions.action_completed = True
 
