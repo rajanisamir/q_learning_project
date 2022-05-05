@@ -64,11 +64,16 @@ class PerformActions(object):
         self.img_center_y = None
 
         # Set up proportional control parameters
-        self.k_p_ang = 0.005
+        self.k_p_ang_cam = 0.005
+        self.k_p_ang_scan = 0.7
         self.k_p_lin = 0.05
-        self.desired_obj_distance = 0.2
+        self.desired_obj_distance = 0.18
         self.drive_error_pixels = 30
-        self.pickup_angle_tolerance = 8
+        self.switch_to_scan = 10
+        self.pickup_angle_tolerance = 0.003 # IN RADIANS (< 1 DEGREE)
+
+        self.at_object = False
+        self.angular_search_velocity = 0.8
 
         # Create a default twist msg (all values 0).
         lin = Vector3()
@@ -78,45 +83,68 @@ class PerformActions(object):
         # Allow publishers/subscribers time to set up
         rospy.sleep(1)
 
+        print('finished setup')
+
 
     def process_scan(self, data):
 
         if self.goal == Goal.PICK_UP or self.goal == Goal.PUT_DOWN:
+
             self.twist.linear.x = 0
             self.twist.angular.z = 0
 
         else:
-            if self.object_center_x is None:
-                return
 
-            object_center_x_error = self.img_center_x - self.object_center_x
-            self.twist.angular.z = self.k_p_ang * object_center_x_error
+            # If the camera data indicates we're at the object, start using scan data.
+            if self.at_object:
 
-            # obj_distances = list(filter(lambda dist: dist != 0, data.ranges[-60:60]))
-            # print(obj_distances)
-            # if len(obj_distances) == 0:
-            #     obj_distance = 1
-            # else:
-            #     obj_distance = min(obj_distances)
-
-            obj_distance = data.ranges[0] if data.ranges[0] != 0 else 2
-            
-            print("closest object distance: ", obj_distance)
-            distance_error = obj_distance - self.desired_obj_distance
-
-            # TODO: Add case for going to tag.
-
-            print("x center error: ", object_center_x_error)
-            print("distance error: ", distance_error)
-
-            if self.goal == Goal.GO_TO_OBJECT and abs(object_center_x_error) < self.pickup_angle_tolerance and abs(distance_error) < 0.1:
-                print('setting goal to pick up')
-                self.goal = Goal.PICK_UP
-                
-            if abs(object_center_x_error) < self.drive_error_pixels:
-                self.twist.linear.x = self.k_p_lin * distance_error
-            else:
+                obj_ang = data.angle_min
                 self.twist.linear.x = 0
+        
+                if obj_ang < self.pickup_angle_tolerance:
+                    print('PICKING UP')
+                    self.twist.angular.z = 0
+                    self.goal = Goal.PICK_UP
+                else:
+                    self.twist.angular.z = self.k_p_ang_scan * obj_ang
+
+            else:
+
+                if self.object_center_x is None:
+
+                    self.twist.linear.x = 0
+                    self.twist.angular.z = self.angular_search_velocity
+
+                else:
+
+                    object_center_x_error = self.img_center_x - self.object_center_x
+                    self.twist.angular.z = self.k_p_ang_cam * object_center_x_error
+
+                    # obj_distances = list(filter(lambda dist: dist != 0, data.ranges[-60:60]))
+                    # print(obj_distances)
+                    # if len(obj_distances) == 0:
+                    #     obj_distance = 1
+                    # else:
+                    #     obj_distance = min(obj_distances)
+
+                    obj_distance = data.ranges[0] if data.ranges[0] != 0 else 2
+                    
+                    print("closest object distance: ", obj_distance)
+                    distance_error = obj_distance - self.desired_obj_distance
+
+                    # TODO: Add case for going to tag.
+
+                    print("x center error: ", object_center_x_error)
+                    print("distance error: ", distance_error)
+
+                    if self.goal == Goal.GO_TO_OBJECT and abs(object_center_x_error) < self.switch_to_scan and abs(distance_error) < 0.1:
+                        print('at object')
+                        self.at_object = True
+                        
+                    if abs(object_center_x_error) < self.drive_error_pixels:
+                        self.twist.linear.x = self.k_p_lin * distance_error
+                    else:
+                        self.twist.linear.x = 0
 
         # Clamp angular speed to 1.82 rad/s and linear speed to 0.26 m/s
         #   to ensure we don't exceed the maximum velocity of the Turtlebot.
@@ -141,12 +169,16 @@ class PerformActions(object):
         M = cv2.moments(mask)
 
         # if there are any specified color pixels found
-        if M['m00'] > 0:
+        if M['m00'] > 10:
                 # center of the color pixels in the image
                 self.object_center_x = int(M['m10']/M['m00'])
                 self.object_center_y = int(M['m01']/M['m00'])
                 print("object_center_x:", self.object_center_x)
                 print("object_center_y:", self.object_center_y)
+        
+        else:
+            self.object_center_x = None
+            self.object_center_y = None
 
         img_width, img_height, img_depth = img.shape
         self.img_center_x = img_width / 2
