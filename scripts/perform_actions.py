@@ -3,6 +3,7 @@
 import rospy, cv2, cv_bridge
 from q_learning_project.msg import RobotMoveObjectToTag, RobotArmAction
 import numpy as np
+import send_actions
 from sensor_msgs.msg import Image, LaserScan
 from geometry_msgs.msg import Twist
 
@@ -145,6 +146,8 @@ class PerformActions(object):
             self.arm_action_pub.publish("put_down")
             rospy.sleep(10) # change this depending on how long it takes to put down an object, or create action completion pub
             return
+
+        send_actions.action_completed = True
 
         
     def run(self):
