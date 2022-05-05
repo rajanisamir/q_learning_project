@@ -40,9 +40,6 @@ class SendActions(object):
             lambda x: {"object": colors[int(x[0])], "tag": int(x[1])},
             self.actions
         ))
-        
-    def set_action_completed(self):
-        self.prev_action_completed = True
 
     # Publishes a specified action for the robot to execute
     def publish_action(self, action):
@@ -80,7 +77,7 @@ class SendActions(object):
 
             # set new state based on action taken
             state = self.get_state(state, optimal_action_idx)
-            
+
 
 if __name__ == '__main__':
     send_actions_node = SendActions()
