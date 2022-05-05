@@ -31,7 +31,7 @@ class Robot(object):
         self.positions = {
             "reset": 
                 {
-                    "arm_joint_goal": [math.radians(0.0), math.radians(0.0), math.radians(0.0), math.radians(0.0)],
+                    "arm_joint_goal": [math.radians(0.0), math.radians(-60.0), math.radians(0.0), math.radians(0.0)],
                     "gripper_joint_goal": [0.0, 0.0]
                 },
             "pick_up": [
