@@ -54,6 +54,7 @@ add_message_files(
     QMatrix.msg
     QMatrixRow.msg
     RobotMoveObjectToTag.msg
+    RobotArmAction.msg
 )
 
 ## Generate services in the 'srv' folder

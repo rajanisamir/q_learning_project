@@ -114,10 +114,10 @@ class QLearning(object):
     # Publishes a specified action for the robot to execute
     def publish_action(self, action):
         # Pull action object and tag from passed dictionary, and then publish it
-        action_stamped = RobotMoveObjectToTag()
-        action_stamped.robot_object = action['object']
-        action_stamped.tag_id = action['tag']
-        self.robot_action_pub.publish(action_stamped)
+        action_object = RobotMoveObjectToTag()
+        action_object.robot_object = action['object']
+        action_object.tag_id = action['tag']
+        self.robot_action_pub.publish(action_object)
     
     # Returns the state associated with taking a specified action from a specified state
     def get_state(self, state, action):
