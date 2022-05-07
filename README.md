@@ -27,6 +27,22 @@ To determine which colored objects belonged in front of each AR tag, we generate
 - Executing the path most likely to lead to receiving a reward after the Q-matrix has converged on the simulated Turtlebot3 robot
 > Due next week
 
+### Robot perception Description
+- Identifying the locations and identities of each of the colored objects
+  - We used logic similar to lab B line follower to identify the colored objects. We subscribe to the camera/rgb/image_raw topic and determine the hsv lower and upper bound values for the colors pink, blue, and green similar to the objects' colors. We defined these values in a dictionary self.color_dict_HSV. We then erase all the pixels that aren't our specified color and determine the center of our color pixels. We implement this logic in our function color_object_handler(self, img) and call this function in our camera/rgb/image_raw subscriber callback: process_image(self, data). In color_object_handler(), we first get our lower and upper hsv values from our specified color and use the moments() function to get the center of our color pixels. We set our values self.target_center_x and self.target_center_y, which will be used for proportional control to drive to the colored object, if we get find more than 10 pixels of our color.
+
+- Identifying the locations and identities of each of the AR tags
+  - We used similar logic from the cat recognizer exercise in class. We again use the subscriber to the camera/rgb/image_raw topic to determine what tags are detected from the camera. We implement our logic in the tag_handler(self, img) function and call this in our camera/rgb/image_raw subscriber callback: process_image(self, data). Note, we have a variable called self.goal which would determine if we are heading towards the colored object or tag and therefore call either color_object_handler() or tag_handler(). In tag_handler, we turn the image into a grayscale and use the detectMarkers function to get the corners, ids, rejected_points of the tags detected. We go through the ids and get the index of our desired tag id. We then use that index to get the corners of our desired tag id and average those x and y corner coordinates to get its center. We put the center coordinates in self.target_center_x and self.target_center_y which again would be used in proprotional control to move the bot to the tag. 
+
+### Robot manipulation and movement
+
+### Challenges
+- A challenge we faced was when moving the turtlebot towards the colored object and then positioning it correctly to pick it up. When testing, the turtlebot got to the colored object correctly, but when it tried to pick it up, the object was a little to the left so the arm sometimes got stuck and couldn't pick it up. We handled this by having a conditional to determine when the bot was close enough to the object, we would then stop the bot's linear velocity and use a different proportional control for the angular velocity using the angles (error term would be the difference of our measured min_angle from the LIDAR scan which tells what angle is the closest object from and our desired angle which is 0 as we want the colored object to be directly in front of the bot). Another challenge was how to determine when a previous action was completed as we had one script that sends the optimal actions and one that would perform those actions. We decided to set up an action_completion_pub publisher in our perform_actions script and the subscriber in our send_actions script. Essentially, once we have completed an action, we would publish in our action_completion_pub and then the subscriber callback in send_actions script would know that an action was just completed, so then it could send the next action. 
+
+### Future work
+
+### Takeaways 
+
 
 ## Implementation Plan
 
