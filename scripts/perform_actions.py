@@ -5,43 +5,27 @@ from turtle import distance
 import rospy, cv2, cv_bridge
 from q_learning_project.msg import RobotMoveObjectToTag, RobotArmAction
 import numpy as np
-import send_actions
 from sensor_msgs.msg import Image, LaserScan
 from geometry_msgs.msg import Twist, Vector3
 
+# Define the potential current goals of the robot
 class Goal(Enum):
     PICK_UP = 1
     GO_TO_OBJECT = 2
     GO_TO_TAG = 3
     PUT_DOWN = 4
 
+
 class PerformActions(object):
     
+    # Initialize necessary components for performing actions
     def __init__(self):
 
         # Initialize this node
         rospy.init_node('perform_actions')
 
-        #initialize parameters
-        self.color = None
-        self.tag_id = None
-        self.color_dict_HSV = {
-            'pink': [[152, 102, 63], [163, 192, 217]],
-            'green': [[35, 114, 63] , [45, 204, 217]],
-            'blue': [[95, 102, 63], [105, 192, 217]],
-        }
-
-        # Initialize goal status
-        self.goal = Goal.GO_TO_OBJECT
-        
-        #lidar scan closest obj distance
-        self.closest = None
-
-        # set up ROS / OpenCV bridge
+        # Set up ROS / OpenCV bridge
         self.bridge = cv_bridge.CvBridge()
-
-        # initalize the debugging window
-        # cv2.namedWindow("window", 1)
 
         # Set up subscriber for robot actions
         rospy.Subscriber("/robot_action", RobotMoveObjectToTag, self.perform_action)
@@ -52,10 +36,24 @@ class PerformActions(object):
         # Set up publisher for robot arm actions
         self.arm_action_pub = rospy.Publisher("/robot_arm_action", RobotArmAction, queue_size=10)
 
-        # Set up publishers for movement, RGB camera, and LiDAR scan
+        # Set up publisher for movement
         self.move_pub = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
+
+        # Set up subscribers for RGB camera and LiDAR scan
         self.image_sub = rospy.Subscriber('camera/rgb/image_raw', Image, self.process_image)
         self.scan_sub = rospy.Subscriber('/scan', LaserScan, self.process_scan)
+
+        # Initialize parameters corresponding with objects and tags
+        self.color = None
+        self.tag_id = None
+        self.color_dict_HSV = {
+            'pink': [[152, 102, 63], [163, 192, 217]],
+            'green': [[35, 114, 63] , [45, 204, 217]],
+            'blue': [[95, 102, 63], [105, 192, 217]],
+        }
+
+        # Initialize goal status as going to an object
+        self.goal = Goal.GO_TO_OBJECT
 
         # Set up image recognition parameters
         self.target_center_x = None
@@ -72,7 +70,6 @@ class PerformActions(object):
         self.drive_error_pixels = 30
         self.switch_to_scan = 10
         self.pickup_angle_tolerance = 0.003 # IN RADIANS (< 1 DEGREE)
-
         self.at_object = False
         self.angular_search_velocity = 0.8
 
@@ -81,10 +78,8 @@ class PerformActions(object):
         ang = Vector3()
         self.twist = Twist(linear=lin,angular=ang)
         
-        # Allow publishers/subscribers time to set up
+        # Allow publishers time to set up
         rospy.sleep(1)
-
-        print('finished setup')
 
 
     def process_scan(self, data):
@@ -153,7 +148,6 @@ class PerformActions(object):
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         lower_bound = np.array(self.color_dict_HSV[self.color][0])
         upper_bound = np.array(self.color_dict_HSV[self.color][1])
-        # this erases all pixels that aren't our color
         mask = cv2.inRange(hsv, lower_bound, upper_bound)
 
         #need to filter search scope of img like in lab b?
