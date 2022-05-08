@@ -12,6 +12,9 @@ class SendActions(object):
     
     def __init__(self):
 
+        # Give perform_arm_actions node and perform_actions node time to set up
+        rospy.sleep(3)
+
         # Initialize this node
         rospy.init_node('send_actions')
 
@@ -25,7 +28,7 @@ class SendActions(object):
         rospy.sleep(1)
 
         # Load Q-matrix from the csv file
-        self.q_matrix = np.loadtxt("q_learning_project/scripts/q_matrix.csv", delimiter=',')
+        self.q_matrix = np.loadtxt(path_prefix + "q_matrix.csv", delimiter=',')
 
         # Load action matrix from txt file
         self.action_matrix = np.loadtxt(path_prefix + "action_matrix.txt")
@@ -63,7 +66,7 @@ class SendActions(object):
 
 
     # Marks the previous action as completed, allowing for the next action to be published
-    def set_prev_action_completed(self):
+    def set_prev_action_completed(self, data):
         self.prev_action_completed = True
 
 
@@ -89,8 +92,10 @@ class SendActions(object):
             
             # Set new state based on action taken
             state = self.get_state(state, optimal_action_idx)
+        
+        self.publish_action({'object': 'None', 'tag': 0})
 
-
+        
 if __name__ == '__main__':
     send_actions_node = SendActions()
     send_actions_node.run()

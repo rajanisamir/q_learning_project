@@ -34,10 +34,6 @@ class PerformArmActions(object):
                 },
             "pick_up": [
                 {
-                    "arm_joint_goal": [math.radians(0.0), math.radians(-60.0), math.radians(0.0), math.radians(0.0)],
-                    "gripper_joint_goal": [0.019, 0.019]
-                },
-                {
                     "arm_joint_goal": [math.radians(0.0), math.radians(20.0), math.radians(0.0), math.radians(0.0)],
                     "gripper_joint_goal": [0.019, 0.019]
                 },

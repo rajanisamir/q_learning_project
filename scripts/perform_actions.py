@@ -20,6 +20,9 @@ class PerformActions(object):
     
     # Initialize necessary components for performing actions
     def __init__(self):
+        
+        # Give perform_arm_actions node time to set up
+        rospy.sleep(2)
 
         # Initialize this node
         rospy.init_node('perform_actions')
@@ -63,15 +66,16 @@ class PerformActions(object):
 
         # Set up proportional control parameters
         self.k_p_ang_cam = 0.005
-        self.k_p_ang_scan = 0.7
-        self.k_p_lin = 0.1
-        self.desired_obj_distance = 0.18
+        self.k_p_ang_scan = 0.4
+        self.k_p_lin = 0.2
+        self.desired_obj_distance = 0.15
         self.desired_tag_distance = 0.4
+        self.obj_distance_tolerance = 0.03
         self.drive_error_pixels = 30
         self.switch_to_scan = 10
-        self.pickup_angle_tolerance = 0.003 # IN RADIANS (< 1 DEGREE)
         self.at_object = False
-        self.angular_search_velocity = 0.8
+        self.angular_search_velocity = 0.5
+        self.put_down_threshold = 0.08
         self.backing_up = False
 
         # Create a default twist msg (all values 0).
@@ -118,7 +122,7 @@ class PerformActions(object):
                 obj_ang = data.angle_min
                 self.twist.linear.x = 0
         
-                if obj_ang < self.pickup_angle_tolerance:
+                if obj_ang == 0:
                     print('PICKING UP')
                     self.twist.angular.z = 0
                     self.goal = Goal.PICK_UP
@@ -146,10 +150,10 @@ class PerformActions(object):
                     else:
                         self.twist.linear.x = 0
 
-                    if self.goal == Goal.GO_TO_OBJECT and abs(target_center_x_error) < self.switch_to_scan and abs(distance_error) < 0.1:
+                    if self.goal == Goal.GO_TO_OBJECT and abs(target_center_x_error) < self.switch_to_scan and abs(distance_error) < self.obj_distance_tolerance:
                         self.at_object = True
                     
-                    if self.goal == Goal.GO_TO_TAG and abs(distance_error) < 0.1:
+                    if self.goal == Goal.GO_TO_TAG and abs(distance_error) < self.put_down_threshold:
                         print('finished going to tag')
                         self.goal = Goal.PUT_DOWN
                         self.twist.linear.x = 0
@@ -252,12 +256,16 @@ class PerformActions(object):
 
     
     def perform_action(self, data):
+
+        if data.robot_object == 'None':
+            self.twist.linear.x = 0
+            self.twist.angular.z = 0
+            self.move_pub.publish(self.twist)
+            rospy.signal_shutdown('Finished')
         
         # Retrieve color and tag ID of object and tag associated with action
         self.color = data.robot_object
         self.tag_id = data.tag_id
-
-        # TODO: Move to colored object (maybe sleep here so that have time for robot to go to object)
         
         # Pick up object
         while not self.goal == Goal.PICK_UP:
