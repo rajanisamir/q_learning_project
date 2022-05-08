@@ -61,7 +61,7 @@ class PerformActions(object):
         self.img_center_x = None
         self.img_center_y = None
 
-        # Set up proportional control parameters for tag movement
+        # Set up proportional control parameters
         self.k_p_ang_cam = 0.005
         self.k_p_ang_scan = 0.7
         self.k_p_lin = 0.1
@@ -72,6 +72,7 @@ class PerformActions(object):
         self.pickup_angle_tolerance = 0.003 # IN RADIANS (< 1 DEGREE)
         self.at_object = False
         self.angular_search_velocity = 0.8
+        self.backing_up = False
 
         # Create a default twist msg (all values 0).
         lin = Vector3()
@@ -83,6 +84,26 @@ class PerformActions(object):
 
 
     def process_scan(self, data):
+
+        if self.backing_up:
+
+            print('Backing up...')
+            
+            # Back up for two seconds
+            self.twist.linear.x = -0.15
+            self.twist.angular.z = 0
+            self.move_pub.publish(self.twist)
+            rospy.sleep(2)
+
+            # Spin around
+            self.twist.linear.x = 0
+            self.twist.angular.z = np.pi / 2
+            self.move_pub.publish(self.twist)
+            rospy.sleep(2)
+
+            self.backing_up = False
+
+            return
 
         if self.goal == Goal.PICK_UP or self.goal == Goal.PUT_DOWN:
 
@@ -144,7 +165,6 @@ class PerformActions(object):
         
         
     def color_object_handler(self, img):
-        self.color = "blue"
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         lower_bound = np.array(self.color_dict_HSV[self.color][0])
         upper_bound = np.array(self.color_dict_HSV[self.color][1])
@@ -173,7 +193,6 @@ class PerformActions(object):
         # cv2.waitKey(3)
     
     def tag_handler(self, img):
-        self.tag_id = 1
 
         # turn the image into a grayscale
         grayscale_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -212,8 +231,12 @@ class PerformActions(object):
         self.target_center_y = tag_center_y
         
 
-    #handle 2 statuses: go_to_color and go_to_tag
+    # Process image before moving to tag or object
     def process_image(self, data):
+
+        if self.color is None or self.tag_id is None:
+            print('waiting for color and/or tag ID')
+            return
 
         img = self.bridge.imgmsg_to_cv2(data, desired_encoding='bgr8')
 
@@ -246,7 +269,7 @@ class PerformActions(object):
         
         self.at_object = False # stop using scan data
 
-        # TODO: BACK UP AND SPIN
+        self.backing_up = True
 
         self.goal = Goal.GO_TO_TAG
 
@@ -258,7 +281,7 @@ class PerformActions(object):
         print('started putting down')
         rospy.sleep(18) # change this depending on how long it takes to put down an object, or create action completion pub
         
-        # TODO: BACK UP AND SPIN
+        self.backing_up = True
 
         self.goal = Goal.GO_TO_OBJECT
 
