@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from distutils.log import error
 from enum import Enum
 import rospy, cv2, cv_bridge
 from q_learning_project.msg import RobotMoveObjectToTag, RobotArmAction
@@ -91,6 +90,7 @@ class PerformActions(object):
 
     def process_scan(self, data):
 
+        #After pick up or put down, get bot to move back and rotate 
         if self.backing_up:
 
             print('Backing up...')
@@ -107,10 +107,12 @@ class PerformActions(object):
             self.move_pub.publish(self.twist)
             rospy.sleep(1.5)
 
+            #reset boolean to false
             self.backing_up = False
 
             return
 
+        #when picking up or putting down obj, don't want bot to move
         elif self.goal == Goal.PICK_UP or self.goal == Goal.PUT_DOWN:
 
             self.twist.linear.x = 0
@@ -118,67 +120,56 @@ class PerformActions(object):
             self.move_pub.publish(self.twist)
             return
 
-        # If the camera data indicates we're at the object, drive forward and then set goal to pick up.
+        # If the camera data indicates we're close enough to obj, stop and adjust angle so
+        # obj is directly in front of bot
         elif self.at_object:
             print("at object")
-
-            # target_center_x_error = self.img_center_x - self.target_center_x
-            # print("center x error: ", target_center_x_error)
             
-
+            #get closest distance value in front section of bot
             min_distance = 4
             for distance in data.ranges[-15:0] + data.ranges[0:15]:
                 if distance > 0:
                     min_distance = min(distance, min_distance)
 
-            obj_ang = data.ranges.index(min_distance)
-                    
+            #get angle of min_distance
+            obj_ang = data.ranges.index(min_distance)                 
             print("obj_ang: ", obj_ang)
+
             error_angle = obj_ang if obj_ang < 180 else obj_ang - 360
             print("error angle: ", error_angle)
 
-            # if abs(target_center_x_error) >= self.obj_angle_tolerance_precise:
-            if obj_ang != 0:
-                # self.twist.angular.z = self.k_p_ang * target_center_x_error
-                
+            #want obj to be directly in front of bot
+            if obj_ang != 0:                
                 self.twist.angular.z = 0.11 * error_angle
                 self.twist.linear.x = 0
                 print("angular vel: ", self.twist.angular.z)
                 self.move_pub.publish(self.twist)
 
             else:
+                #ready for bot to move forward and pick up obj
                 self.ready_to_pick_up = True
+                #reset boolean to false
                 self.at_object = False
         
+        # obj directly in front, move forward to pick up
         elif self.ready_to_pick_up:
             print("ready to pick up")
 
-            # Move forward
+            # Move forward towards colored obj
             self.twist.linear.x = 0.1
             self.twist.angular.z = 0
             self.move_pub.publish(self.twist)
             rospy.sleep(3.5)
 
             # Set goal to pick up
-            print("setting goal tot pickup")
+            print("setting goal to pickup")
             self.goal = Goal.PICK_UP
             self.ready_to_pick_up = False
 
             return
-
-            # obj_ang = data.angle_min
-            # self.twist.linear.x = 0
-    
-            # if obj_ang == 0:
-            #     print('PICKING UP')
-            #     self.twist.angular.z = 0
-            #     self.goal = Goal.PICK_UP
-            # else:
-            #     self.twist.angular.z = self.k_p_ang_scan * obj_ang
-
-
         else:
 
+            #if not found target yet
             if self.target_center_x is None:
                 print('searching...')
                 self.twist.linear.x = 0
@@ -189,7 +180,6 @@ class PerformActions(object):
                 target_center_x_error = self.img_center_x - self.target_center_x
                 self.twist.angular.z = self.k_p_ang * target_center_x_error
                 
-                # target_distance = data.ranges[0] if data.ranges[0] != 0 else 2
 
                 target_distance = 4
                 for distance in data.ranges[-15:0] + data.ranges[0:15]:
@@ -206,17 +196,12 @@ class PerformActions(object):
                 else:
                     self.twist.linear.x = 0
 
+                #within distance of obj => set at_object to true for next scan
                 if self.goal == Goal.GO_TO_OBJECT and abs(target_center_x_error) < self.obj_angle_tolerance and abs(distance_error) < self.obj_distance_tolerance:
                     self.at_object = True
-
-                    # self.twist.linear.x = 0
-                    # self.twist.angular.z = 0
-                    # self.move_pub.publish(self.twist)
-
-                    # rospy.sleep(1)
-
                     return
                 
+                #closes enough to tag to put down obj
                 if self.goal == Goal.GO_TO_TAG and abs(distance_error) < self.put_down_threshold:
                     print('finished going to tag')
                     self.goal = Goal.PUT_DOWN
@@ -238,30 +223,27 @@ class PerformActions(object):
         upper_bound = np.array(self.color_dict_HSV[self.color][1])
         mask = cv2.inRange(hsv, lower_bound, upper_bound)
 
-        #need to filter search scope of img like in lab b?
+        #filter search scope of img
         h, w, d = img.shape
         search_left = int(w/3)
         search_right = int(2*w/3)
         mask[0:h, 0:search_left] = 0
         mask[0:h, search_right:w] = 0
         
-        # using moments() function, the center of the yellow pixels is determined
+        # using moments() function, the center of the color pixels is determined
         M = cv2.moments(mask)
 
-        # if there are any specified color pixels found
+        # if there are more than 10 specified color pixels found
         if M['m00'] > 10:
                 # center of the color pixels in the image
                 self.target_center_x = int(M['m10']/M['m00'])
                 self.target_center_y = int(M['m01']/M['m00'])
-                #print("target_center_x:", self.target_center_x)
-                #print("target_center_y:", self.target_center_y)
         
         else:
             self.target_center_x = None
             self.target_center_y = None
 
         # shows the debugging window
-        # hint: you might want to disable this once you're able to get a red circle in the debugging window
         # cv2.imshow("window", img)
         # cv2.waitKey(3)
     
@@ -291,6 +273,7 @@ class PerformActions(object):
             print('no tag matches found')
             return
         
+        #get avg of x and y corner coords
         x_coords = []
         y_coords = []
         for coord in corners[tag_idx][0]:
@@ -344,8 +327,10 @@ class PerformActions(object):
         print('started picking up')
         rospy.sleep(10)
         
+        #move back and rotate
         self.backing_up = True
-
+        
+        #now want bot to go to tag
         self.goal = Goal.GO_TO_TAG
 
         # Put down object
@@ -356,10 +341,13 @@ class PerformActions(object):
         print('started putting down')
         rospy.sleep(10)
         
+        #move back and rotate
         self.backing_up = True
 
+        #go to next colored object
         self.goal = Goal.GO_TO_OBJECT
 
+        #indication that bot completed action
         self.action_completion_pub.publish(data)
 
         
