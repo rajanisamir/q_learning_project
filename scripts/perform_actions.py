@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 from enum import Enum
-from turtle import distance
 import rospy, cv2, cv_bridge
 from q_learning_project.msg import RobotMoveObjectToTag, RobotArmAction
 import numpy as np
@@ -65,14 +64,13 @@ class PerformActions(object):
         self.img_center_y = None
 
         # Set up proportional control parameters
-        self.k_p_ang_cam = 0.005
-        self.k_p_ang_scan = 0.4
+        self.k_p_ang = 0.005
         self.k_p_lin = 0.2
-        self.desired_obj_distance = 0.15
+        self.desired_obj_distance = 0.2
         self.desired_tag_distance = 0.4
-        self.obj_distance_tolerance = 0.03
-        self.drive_error_pixels = 30
-        self.switch_to_scan = 10
+        self.obj_distance_tolerance = 0.05
+        self.obj_angle_tolerance = 5
+        self.drive_error_pixels = 25
         self.at_object = False
         self.angular_search_velocity = 0.5
         self.put_down_threshold = 0.08
@@ -91,7 +89,7 @@ class PerformActions(object):
 
         if self.backing_up:
 
-            print('Backing up...')
+            rospy.loginfo('Backing up...')
             
             # Back up for two seconds
             self.twist.linear.x = -0.15
@@ -103,7 +101,7 @@ class PerformActions(object):
             self.twist.linear.x = 0
             self.twist.angular.z = np.pi / 2
             self.move_pub.publish(self.twist)
-            rospy.sleep(2)
+            rospy.sleep(1.5)
 
             self.backing_up = False
 
@@ -113,60 +111,73 @@ class PerformActions(object):
 
             self.twist.linear.x = 0
             self.twist.angular.z = 0
+            self.move_pub.publish(self.twist)
+            return
+
+        # If the camera data indicates we're at the object, drive forward and then set goal to pick up.
+        if self.at_object:
+
+            # Move forward for one second
+            self.twist.linear.x = 0.1
+            self.twist.angular.z = 0
+            self.move_pub.publish(self.twist)
+            rospy.sleep(1)
+
+            # Set goal to pick up
+            self.goal = Goal.PICK_UP
+            self.at_object = False
+
+            return
+
+            # obj_ang = data.angle_min
+            # self.twist.linear.x = 0
+    
+            # if obj_ang == 0:
+            #     rospy.loginfo('PICKING UP')
+            #     self.twist.angular.z = 0
+            #     self.goal = Goal.PICK_UP
+            # else:
+            #     self.twist.angular.z = self.k_p_ang_scan * obj_ang
+
 
         else:
 
-            # If the camera data indicates we're at the object, start using scan data.
-            if self.at_object:
-
-                obj_ang = data.angle_min
+            if self.target_center_x is None:
+                rospy.loginfo('searching...')
                 self.twist.linear.x = 0
-        
-                if obj_ang == 0:
-                    print('PICKING UP')
-                    self.twist.angular.z = 0
-                    self.goal = Goal.PICK_UP
-                else:
-                    self.twist.angular.z = self.k_p_ang_scan * obj_ang
+                self.twist.angular.z = self.angular_search_velocity
 
             else:
 
-                if self.target_center_x is None:
-                    print('searching...')
-                    self.twist.linear.x = 0
-                    self.twist.angular.z = self.angular_search_velocity
+                target_center_x_error = self.img_center_x - self.target_center_x
+                self.twist.angular.z = self.k_p_ang * target_center_x_error
+                
+                target_distance = data.ranges[0] if data.ranges[0] != 0 else 2
+                desired_target_distance = self.desired_obj_distance if self.goal == Goal.GO_TO_OBJECT else self.desired_tag_distance
+                distance_error = target_distance - desired_target_distance
 
+                if abs(target_center_x_error) < self.drive_error_pixels:
+                    self.twist.linear.x = self.k_p_lin * distance_error
                 else:
+                    self.twist.linear.x = 0
 
-                    target_center_x_error = self.img_center_x - self.target_center_x
-                    self.twist.angular.z = self.k_p_ang_cam * target_center_x_error
-
-                    target_distance = data.ranges[0] if data.ranges[0] != 0 else 2
-                    desired_target_distance = self.desired_obj_distance if self.goal == Goal.GO_TO_OBJECT else self.desired_tag_distance
-                    distance_error = target_distance - desired_target_distance
-
-                    if abs(target_center_x_error) < self.drive_error_pixels:
-                        self.twist.linear.x = self.k_p_lin * distance_error
-                    else:
-                        self.twist.linear.x = 0
-
-                    if self.goal == Goal.GO_TO_OBJECT and abs(target_center_x_error) < self.switch_to_scan and abs(distance_error) < self.obj_distance_tolerance:
-                        self.at_object = True
+                if self.goal == Goal.GO_TO_OBJECT and abs(target_center_x_error) < self.obj_angle_tolerance and abs(distance_error) < self.obj_distance_tolerance:
+                    self.at_object = True
+                
+                if self.goal == Goal.GO_TO_TAG and abs(distance_error) < self.put_down_threshold:
+                    rospy.loginfo('finished going to tag')
+                    self.goal = Goal.PUT_DOWN
+                    self.twist.linear.x = 0
+                    self.twist.angular.z = 0
                     
-                    if self.goal == Goal.GO_TO_TAG and abs(distance_error) < self.put_down_threshold:
-                        print('finished going to tag')
-                        self.goal = Goal.PUT_DOWN
-                        self.twist.linear.x = 0
-                        self.twist.angular.z = 0
-                    
-        # Clamp angular speed to 1.82 rad/s and linear speed to 0.26 m/s
-        #   to ensure we don't exceed the maximum velocity of the Turtlebot.
-        self.twist.angular.z = min(1.82, max(self.twist.angular.z, -1.82))
-        self.twist.linear.x = min(0.26, max(self.twist.linear.x, -0.26))
-    
-        # Publish Twist message to cmd_vel.
-        self.move_pub.publish(self.twist)
+            # Clamp angular speed to 1.82 rad/s and linear speed to 0.26 m/s
+            #   to ensure we don't exceed the maximum velocity of the Turtlebot.
+            self.twist.angular.z = min(1.82, max(self.twist.angular.z, -1.82))
+            self.twist.linear.x = min(0.26, max(self.twist.linear.x, -0.26))
         
+            # Publish Twist message to cmd_vel.
+            self.move_pub.publish(self.twist)
+
         
     def color_object_handler(self, img):
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -184,8 +195,8 @@ class PerformActions(object):
                 # center of the color pixels in the image
                 self.target_center_x = int(M['m10']/M['m00'])
                 self.target_center_y = int(M['m01']/M['m00'])
-                print("target_center_x:", self.target_center_x)
-                print("target_center_y:", self.target_center_y)
+                rospy.loginfo("target_center_x:", self.target_center_x)
+                rospy.loginfo("target_center_y:", self.target_center_y)
         
         else:
             self.target_center_x = None
@@ -207,7 +218,7 @@ class PerformActions(object):
         if ids is None:
             self.target_center_x = None
             self.target_center_y = None
-            print('no tags found')
+            rospy.loginfo('no tags found')
             return
 
         ids = np.ndarray.flatten(ids)
@@ -219,7 +230,7 @@ class PerformActions(object):
         if tag_idx is None:
             self.target_center_x = None
             self.target_center_y = None
-            print('no tag matches found')
+            rospy.loginfo('no tag matches found')
             return
         
         x_coords = []
@@ -239,7 +250,7 @@ class PerformActions(object):
     def process_image(self, data):
 
         if self.color is None or self.tag_id is None:
-            print('waiting for color and/or tag ID')
+            rospy.loginfo('waiting for color and/or tag ID')
             return
 
         img = self.bridge.imgmsg_to_cv2(data, desired_encoding='bgr8')
@@ -272,11 +283,9 @@ class PerformActions(object):
             pass
 
         self.arm_action_pub.publish("pick_up")
-        print('started picking up')
+        rospy.loginfo('started picking up')
         rospy.sleep(18) # change this depending on how long it takes to pick up an object, or create action completion pub
         
-        self.at_object = False # stop using scan data
-
         self.backing_up = True
 
         self.goal = Goal.GO_TO_TAG
@@ -286,7 +295,7 @@ class PerformActions(object):
             pass
 
         self.arm_action_pub.publish("put_down")
-        print('started putting down')
+        rospy.loginfo('started putting down')
         rospy.sleep(18) # change this depending on how long it takes to put down an object, or create action completion pub
         
         self.backing_up = True

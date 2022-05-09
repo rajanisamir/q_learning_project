@@ -1,1 +1,5 @@
-<!-- TODO -->
+<launch>
+    <node name="perform_arm_actions" pkg="q_learning_project" type="perform_arm_actions.py" />
+    <node name="perform_actions" pkg="q_learning_project" type="perform_actions.py" />
+    <node name="send_actions" pkg="q_learning_project" type="send_actions.py" />
+</launch>
