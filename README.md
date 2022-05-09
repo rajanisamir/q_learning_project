@@ -36,6 +36,18 @@ To determine which colored objects belonged in front of each AR tag, we generate
 
 ### Robot manipulation and movement
 
+- Moving to the right spot in order to pick up a colored object
+  - TODO
+  
+- Picking up the colored object
+  - TODO
+
+- Moving to the desired destination (AR tag) with the colored object
+  - We'll use proportional control on the angular and linear velocities of the turtlebot to move it towards the tag. We implement this logic in process_scan() callback function (the last else statement line 178). From our image callback function, we should have a value for self.target_center_x, which we would use to get the error term by getting the difference between it and the image center (which we also get from the image callback). Our angular velocity then becomes multiplying this error term (self.target_center_x_error) by a kp constant we define. We then use the LIDAR scan to see what's the measured distance of the tag and get the difference between that and our desired distance. We again multiply this error term (distance_error) by another kp constant we define. Then we have another conditional to check once we're close enough to the tag, we stop the bot and signal that it's time to drop the object.
+
+- Putting the colored object back down at the desired destination
+  - When the turtlebot is moving towards the tag, the arm is positioned upwards so when the bot gets close enough to the tag, we then lower the arm and open the gripper to release the object. We implement this logic in the second half of the perform_action callback function for the /robot_action subscriber (perform_actions.py script) and the arm_action_received() callback function for the /robot_arm_action subscriber (perform_arm_actions.py script). In perform_action function, we publish to the /robot_arm_action topic that indicates to put down the object. This is then received in arm_action_received(), which will then use the joint goals stated for self.positions["put down"]. We got these joint goals via testing with rviz and the bot itself. 
+
 ### Challenges
 A challenge we faced was when moving the turtlebot towards the colored object and then positioning it correctly to pick it up (defintely spent most of the project time on this). When testing, the turtlebot got to the colored object correctly, but when it tried to pick it up, the object was a little to the left so the arm sometimes got stuck and couldn't pick it up. We also initially had the arm go up and then come down on the object to try to pick it up. We found this first method to be very inconsistent in its success rates so we changed our method to similar to how the gif in the project page had it. We now had the arm to be lower and the bot would essentially drive straight towards the object, close the gripper, then bring the arm up. When we got a certain distance close enough to the object, we adjust it's positioning so the object is in front of the bot. Then the bot would move forward for a couple of seconds and grab the object. Some other things we changed was that is that we filtered the search scope of the image so that it only looks in the middle of the image. We also switched the proportional control to use the LIDAR scan when close enough to the object to position itself so that the object was directly in front of the bot to pick up. 
 Another challenge was how to determine when a previous action was completed as we had one script that sends the optimal actions and one that would perform those actions. We decided to set up an action_completion_pub publisher in our perform_actions script and the subscriber in our send_actions script. Essentially, once we have completed an action, we would publish in our action_completion_pub and then the subscriber callback in send_actions script would know that an action was just completed, so then it could send the next action. 
@@ -44,14 +56,11 @@ Another challenge was how to determine when a previous action was completed as w
 One way in which our work could be extended is by generalizing our setup to one in which the objects and tags are not lined up neatly. This could be achieved by using SLAM to allow to robot to systematically search its environment when looking for the objects and tags, rather than using our current implementation, in which the robot spins in a circle to find the objects and tags. We might also generalize the "pick up" action to work on objects of arbitrary height by using the vertical position of the object's center (found using the Raspberry Pi camera) to determine how far the robot's arm should extend downward to pick up the object. We could further extend the robot's functionality by using image classification to allow the robot to recognize arbitrary objects, training a machine learning model on images that we might want to recognize. Finally, we could take a more systematic approach in learning the Q-matrix by checking for convergence only after each action has been taken once, rather than after a fixed reward sum has been reached. This would ensure that the convergence check passes not just because a representative sample of actions has not been taken, but because the quality values of each action in each state have truly converged.
 
 ### Takeaways 
-
+1. This project gave us a lot of freedom in organization and structuring of our code. Unlike in the particle filter project where I felt like we were essentially just filling in functions, here we were writing our own scripts and nodes and making sure everything connected with each other. Furthermore, we had to handle many different components of the bot like the arm, camera, LIDAR scan, movement. It really felt like we were pulling everything we learned into this project as we used implementation logic from many previous exercises like the line follower and cat recognizer with the proportional control. 
 
 ### Video
 
-
-
 https://user-images.githubusercontent.com/60594579/167492379-d3d328da-744a-4677-9256-1b05e27356c4.mov
-
 
 ## Implementation Plan
 
