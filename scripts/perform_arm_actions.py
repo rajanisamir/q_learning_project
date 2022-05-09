@@ -29,26 +29,26 @@ class PerformArmActions(object):
         self.positions = {
             "reset": 
                 {
-                    "arm_joint_goal": [math.radians(0.0), math.radians(20.0), math.radians(0.0), math.radians(0.0)],
+                    "arm_joint_goal": [math.radians(0.0), math.radians(20.0), math.radians(0.0), math.radians(-10.0)],
                     "gripper_joint_goal": [0.019, 0.019]
                 },
             "pick_up": [
                 {
-                    "arm_joint_goal": [math.radians(0.0), math.radians(20.0), math.radians(0.0), math.radians(0.0)],
+                    "arm_joint_goal": [math.radians(0.0), math.radians(20.0), math.radians(0.0), math.radians(-10.0)],
                     "gripper_joint_goal": [0.0, 0.0]
                 },
                 {
-                    "arm_joint_goal": [math.radians(0.0), math.radians(-60.0), math.radians(0.0), math.radians(0.0)],
+                    "arm_joint_goal": [math.radians(0.0), math.radians(-60.0), math.radians(0.0), math.radians(-10.0)],
                     "gripper_joint_goal": [0.0, 0.0]
                 },
             ],
             "put_down": [
                 {
-                    "arm_joint_goal": [math.radians(0.0), math.radians(20.0), math.radians(0.0), math.radians(0.0)],
+                    "arm_joint_goal": [math.radians(0.0), math.radians(20.0), math.radians(0.0), math.radians(-10.0)],
                     "gripper_joint_goal": [0.0, 0.0]
                 },
                 {
-                    "arm_joint_goal": [math.radians(0.0), math.radians(20.0), math.radians(0.0), math.radians(0.0)],
+                    "arm_joint_goal": [math.radians(0.0), math.radians(20.0), math.radians(0.0), math.radians(-10.0)],
                     "gripper_joint_goal": [0.019, 0.019]
                 },
             ]

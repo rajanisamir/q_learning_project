@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from distutils.log import error
 from enum import Enum
 import rospy, cv2, cv_bridge
 from q_learning_project.msg import RobotMoveObjectToTag, RobotArmAction
@@ -64,17 +65,20 @@ class PerformActions(object):
         self.img_center_y = None
 
         # Set up proportional control parameters
-        self.k_p_ang = 0.005
-        self.k_p_lin = 0.2
-        self.desired_obj_distance = 0.2
+        self.k_p_ang = 0.01
+        self.k_p_lin = 0.26
+        self.desired_obj_distance = 0.45
         self.desired_tag_distance = 0.4
-        self.obj_distance_tolerance = 0.05
-        self.obj_angle_tolerance = 5
-        self.drive_error_pixels = 25
+        self.obj_distance_tolerance = 0.1
+        self.obj_angle_tolerance = 8
+        self.obj_angle_tolerance_precise = 2
+        self.drive_error_pixels = 15
         self.at_object = False
         self.angular_search_velocity = 0.5
         self.put_down_threshold = 0.08
         self.backing_up = False
+        self.ready_to_pick_up = False
+
 
         # Create a default twist msg (all values 0).
         lin = Vector3()
@@ -89,7 +93,7 @@ class PerformActions(object):
 
         if self.backing_up:
 
-            rospy.loginfo('Backing up...')
+            print('Backing up...')
             
             # Back up for two seconds
             self.twist.linear.x = -0.15
@@ -107,7 +111,7 @@ class PerformActions(object):
 
             return
 
-        if self.goal == Goal.PICK_UP or self.goal == Goal.PUT_DOWN:
+        elif self.goal == Goal.PICK_UP or self.goal == Goal.PUT_DOWN:
 
             self.twist.linear.x = 0
             self.twist.angular.z = 0
@@ -115,17 +119,50 @@ class PerformActions(object):
             return
 
         # If the camera data indicates we're at the object, drive forward and then set goal to pick up.
-        if self.at_object:
+        elif self.at_object:
+            print("at object")
 
-            # Move forward for one second
+            # target_center_x_error = self.img_center_x - self.target_center_x
+            # print("center x error: ", target_center_x_error)
+            
+
+            min_distance = 4
+            for distance in data.ranges[-15:0] + data.ranges[0:15]:
+                if distance > 0:
+                    min_distance = min(distance, min_distance)
+
+            obj_ang = data.ranges.index(min_distance)
+                    
+            print("obj_ang: ", obj_ang)
+            error_angle = obj_ang if obj_ang < 180 else obj_ang - 360
+            print("error angle: ", error_angle)
+
+            # if abs(target_center_x_error) >= self.obj_angle_tolerance_precise:
+            if obj_ang != 0:
+                # self.twist.angular.z = self.k_p_ang * target_center_x_error
+                
+                self.twist.angular.z = 0.11 * error_angle
+                self.twist.linear.x = 0
+                print("angular vel: ", self.twist.angular.z)
+                self.move_pub.publish(self.twist)
+
+            else:
+                self.ready_to_pick_up = True
+                self.at_object = False
+        
+        elif self.ready_to_pick_up:
+            print("ready to pick up")
+
+            # Move forward
             self.twist.linear.x = 0.1
             self.twist.angular.z = 0
             self.move_pub.publish(self.twist)
-            rospy.sleep(1)
+            rospy.sleep(3.5)
 
             # Set goal to pick up
+            print("setting goal tot pickup")
             self.goal = Goal.PICK_UP
-            self.at_object = False
+            self.ready_to_pick_up = False
 
             return
 
@@ -133,7 +170,7 @@ class PerformActions(object):
             # self.twist.linear.x = 0
     
             # if obj_ang == 0:
-            #     rospy.loginfo('PICKING UP')
+            #     print('PICKING UP')
             #     self.twist.angular.z = 0
             #     self.goal = Goal.PICK_UP
             # else:
@@ -143,7 +180,7 @@ class PerformActions(object):
         else:
 
             if self.target_center_x is None:
-                rospy.loginfo('searching...')
+                print('searching...')
                 self.twist.linear.x = 0
                 self.twist.angular.z = self.angular_search_velocity
 
@@ -152,7 +189,15 @@ class PerformActions(object):
                 target_center_x_error = self.img_center_x - self.target_center_x
                 self.twist.angular.z = self.k_p_ang * target_center_x_error
                 
-                target_distance = data.ranges[0] if data.ranges[0] != 0 else 2
+                # target_distance = data.ranges[0] if data.ranges[0] != 0 else 2
+
+                target_distance = 4
+                for distance in data.ranges[-15:0] + data.ranges[0:15]:
+                    if distance > 0:
+                        target_distance = min(distance, target_distance)
+
+                print("target_distance: ", target_distance)
+
                 desired_target_distance = self.desired_obj_distance if self.goal == Goal.GO_TO_OBJECT else self.desired_tag_distance
                 distance_error = target_distance - desired_target_distance
 
@@ -163,9 +208,17 @@ class PerformActions(object):
 
                 if self.goal == Goal.GO_TO_OBJECT and abs(target_center_x_error) < self.obj_angle_tolerance and abs(distance_error) < self.obj_distance_tolerance:
                     self.at_object = True
+
+                    # self.twist.linear.x = 0
+                    # self.twist.angular.z = 0
+                    # self.move_pub.publish(self.twist)
+
+                    # rospy.sleep(1)
+
+                    return
                 
                 if self.goal == Goal.GO_TO_TAG and abs(distance_error) < self.put_down_threshold:
-                    rospy.loginfo('finished going to tag')
+                    print('finished going to tag')
                     self.goal = Goal.PUT_DOWN
                     self.twist.linear.x = 0
                     self.twist.angular.z = 0
@@ -186,6 +239,11 @@ class PerformActions(object):
         mask = cv2.inRange(hsv, lower_bound, upper_bound)
 
         #need to filter search scope of img like in lab b?
+        h, w, d = img.shape
+        search_left = int(w/3)
+        search_right = int(2*w/3)
+        mask[0:h, 0:search_left] = 0
+        mask[0:h, search_right:w] = 0
         
         # using moments() function, the center of the yellow pixels is determined
         M = cv2.moments(mask)
@@ -195,8 +253,8 @@ class PerformActions(object):
                 # center of the color pixels in the image
                 self.target_center_x = int(M['m10']/M['m00'])
                 self.target_center_y = int(M['m01']/M['m00'])
-                rospy.loginfo("target_center_x:", self.target_center_x)
-                rospy.loginfo("target_center_y:", self.target_center_y)
+                #print("target_center_x:", self.target_center_x)
+                #print("target_center_y:", self.target_center_y)
         
         else:
             self.target_center_x = None
@@ -218,7 +276,7 @@ class PerformActions(object):
         if ids is None:
             self.target_center_x = None
             self.target_center_y = None
-            rospy.loginfo('no tags found')
+            print('no tags found')
             return
 
         ids = np.ndarray.flatten(ids)
@@ -230,7 +288,7 @@ class PerformActions(object):
         if tag_idx is None:
             self.target_center_x = None
             self.target_center_y = None
-            rospy.loginfo('no tag matches found')
+            print('no tag matches found')
             return
         
         x_coords = []
@@ -250,7 +308,7 @@ class PerformActions(object):
     def process_image(self, data):
 
         if self.color is None or self.tag_id is None:
-            rospy.loginfo('waiting for color and/or tag ID')
+            print('waiting for color and/or tag ID')
             return
 
         img = self.bridge.imgmsg_to_cv2(data, desired_encoding='bgr8')
@@ -283,8 +341,8 @@ class PerformActions(object):
             pass
 
         self.arm_action_pub.publish("pick_up")
-        rospy.loginfo('started picking up')
-        rospy.sleep(18) # change this depending on how long it takes to pick up an object, or create action completion pub
+        print('started picking up')
+        rospy.sleep(10)
         
         self.backing_up = True
 
@@ -295,8 +353,8 @@ class PerformActions(object):
             pass
 
         self.arm_action_pub.publish("put_down")
-        rospy.loginfo('started putting down')
-        rospy.sleep(18) # change this depending on how long it takes to put down an object, or create action completion pub
+        print('started putting down')
+        rospy.sleep(10)
         
         self.backing_up = True
 
