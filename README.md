@@ -60,6 +60,8 @@ One way in which our work could be extended is by generalizing our setup to one 
 
 ### Video
 
+https://user-images.githubusercontent.com/38731359/167584471-456732c8-7935-40db-b3df-72da4e01137a.mov
+
 https://user-images.githubusercontent.com/60594579/167492379-d3d328da-744a-4677-9256-1b05e27356c4.mov
 
 ## Implementation Plan
