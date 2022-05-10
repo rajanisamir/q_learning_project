@@ -93,6 +93,7 @@ class SendActions(object):
             # Set new state based on action taken
             state = self.get_state(state, optimal_action_idx)
         
+        # Publish an empty action to stop the robot
         self.publish_action({'object': 'None', 'tag': 0})
 
         
