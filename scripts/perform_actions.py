@@ -64,15 +64,14 @@ class PerformActions(object):
         self.img_center_y = None
 
         # Set up proportional control parameters
-        self.k_p_ang = 0.01
-        self.k_p_ang_scan = 0.11
-        self.k_p_lin = 0.26
+        self.k_p_ang = 0.008
+        self.k_p_ang_scan = 0.07
+        self.k_p_lin = 0.3
         self.desired_obj_distance = 0.45
         self.desired_tag_distance = 0.4
         self.obj_distance_tolerance = 0.1
-        self.obj_angle_tolerance = 8
-        self.obj_angle_tolerance_precise = 2
-        self.drive_error_pixels = 15
+        self.obj_angle_tolerance = 4
+        self.drive_error_pixels = 25
         self.angular_search_velocity = 0.5
         self.put_down_threshold = 0.08
 
@@ -96,11 +95,11 @@ class PerformActions(object):
         # If the robot has just picked up or put down an object, move back and rotate 
         if self.backing_up:
             
-            # Back up for two seconds
+            # Back up for a few seconds
             self.twist.linear.x = -0.15
             self.twist.angular.z = 0
             self.move_pub.publish(self.twist)
-            rospy.sleep(2)
+            rospy.sleep(3)
 
             # Spin around
             self.twist.linear.x = 0
@@ -132,8 +131,13 @@ class PerformActions(object):
 
             # Get angle corresponding with the closest distance to an object, and convert it to
             #   an error term for proportional control
-            obj_ang = data.ranges.index(min_distance)                 
-            error_angle = obj_ang if obj_ang < 180 else obj_ang - 360
+            if min_distance != 4:
+                obj_ang = data.ranges.index(min_distance)                 
+                error_angle = obj_ang if obj_ang < 180 else obj_ang - 360
+
+            # If the robot can no longer locate the object, set at_object to False
+            else:
+                self.at_object = False
 
             # Continue exercising proportional control until the angle to the object is 0
             if obj_ang != 0:                
@@ -154,7 +158,7 @@ class PerformActions(object):
             self.twist.linear.x = 0.1
             self.twist.angular.z = 0
             self.move_pub.publish(self.twist)
-            rospy.sleep(3.5)
+            rospy.sleep(3.3)
 
             # Set the robot's goal to pick up
             self.goal = Goal.PICK_UP
@@ -222,10 +226,10 @@ class PerformActions(object):
         upper_bound = np.array(self.color_dict_HSV[self.color][1])
         mask = cv2.inRange(hsv, lower_bound, upper_bound)
 
-        # Filter search scope of image
+        # Filter search scope of image to inner third
         h, w, d = img.shape
-        search_left = int(w/3)
-        search_right = int(2*w/3)
+        search_left = int(w / 3)
+        search_right = int(2 * w / 3)
         mask[0:h, 0:search_left] = 0
         mask[0:h, search_right:w] = 0
         
