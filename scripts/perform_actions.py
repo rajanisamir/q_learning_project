@@ -65,6 +65,7 @@ class PerformActions(object):
 
         # Set up proportional control parameters
         self.k_p_ang = 0.01
+        self.k_p_ang_scan = 0.11
         self.k_p_lin = 0.26
         self.desired_obj_distance = 0.45
         self.desired_tag_distance = 0.4
@@ -72,12 +73,13 @@ class PerformActions(object):
         self.obj_angle_tolerance = 8
         self.obj_angle_tolerance_precise = 2
         self.drive_error_pixels = 15
-        self.at_object = False
         self.angular_search_velocity = 0.5
         self.put_down_threshold = 0.08
+
+        # Set up parameters corresponding with specific states of robot
+        self.at_object = False
         self.backing_up = False
         self.ready_to_pick_up = False
-
 
         # Create a default twist msg (all values 0).
         lin = Vector3()
@@ -88,12 +90,11 @@ class PerformActions(object):
         rospy.sleep(1)
 
 
+    # Callback for scan topic that exercises proportional control on the robot
     def process_scan(self, data):
 
-        #After pick up or put down, get bot to move back and rotate 
+        # If the robot has just picked up or put down an object, move back and rotate 
         if self.backing_up:
-
-            print('Backing up...')
             
             # Back up for two seconds
             self.twist.linear.x = -0.15
@@ -107,12 +108,11 @@ class PerformActions(object):
             self.move_pub.publish(self.twist)
             rospy.sleep(1.5)
 
-            #reset boolean to false
             self.backing_up = False
 
             return
 
-        #when picking up or putting down obj, don't want bot to move
+        # When picking up or putting down an object, stop movement
         elif self.goal == Goal.PICK_UP or self.goal == Goal.PUT_DOWN:
 
             self.twist.linear.x = 0
@@ -120,90 +120,86 @@ class PerformActions(object):
             self.move_pub.publish(self.twist)
             return
 
-        # If the camera data indicates we're close enough to obj, stop and adjust angle so
-        # obj is directly in front of bot
+        # If the camera data indicates the robot is close enough to the object, stop moving
+        #   and fine-tune the angle to the object using scan data
         elif self.at_object:
-            print("at object")
             
-            #get closest distance value in front section of bot
+            # Get closest distance to an object in front of the robot
             min_distance = 4
             for distance in data.ranges[-15:0] + data.ranges[0:15]:
                 if distance > 0:
                     min_distance = min(distance, min_distance)
 
-            #get angle of min_distance
+            # Get angle corresponding with the closest distance to an object, and convert it to
+            #   an error term for proportional control
             obj_ang = data.ranges.index(min_distance)                 
-            print("obj_ang: ", obj_ang)
-
             error_angle = obj_ang if obj_ang < 180 else obj_ang - 360
-            print("error angle: ", error_angle)
 
-            #want obj to be directly in front of bot
+            # Continue exercising proportional control until the angle to the object is 0
             if obj_ang != 0:                
-                self.twist.angular.z = 0.11 * error_angle
+                self.twist.angular.z = self.k_p_ang_scan * error_angle
                 self.twist.linear.x = 0
-                print("angular vel: ", self.twist.angular.z)
                 self.move_pub.publish(self.twist)
 
+            # If the angle to the object is 0, the robot is ready to move forward and pick up the object
             else:
-                #ready for bot to move forward and pick up obj
+
                 self.ready_to_pick_up = True
-                #reset boolean to false
                 self.at_object = False
         
-        # obj directly in front, move forward to pick up
+        # If the robot is facing the object precisely, move forward and pick it up
         elif self.ready_to_pick_up:
-            print("ready to pick up")
 
-            # Move forward towards colored obj
+            # Move forward to the object
             self.twist.linear.x = 0.1
             self.twist.angular.z = 0
             self.move_pub.publish(self.twist)
             rospy.sleep(3.5)
 
-            # Set goal to pick up
-            print("setting goal to pickup")
+            # Set the robot's goal to pick up
             self.goal = Goal.PICK_UP
             self.ready_to_pick_up = False
 
             return
+
+        # If none of the above special cases apply, exercise standard proportional control
         else:
 
-            #if not found target yet
+            # If the target cannot be located, spin in a circle to locate it
             if self.target_center_x is None:
-                print('searching...')
                 self.twist.linear.x = 0
                 self.twist.angular.z = self.angular_search_velocity
 
+            # If we can find the target, use proportional control to move toward it
             else:
-
+                
+                # Set angular velocity based on error in center position of target
                 target_center_x_error = self.img_center_x - self.target_center_x
                 self.twist.angular.z = self.k_p_ang * target_center_x_error
                 
-
+                # Find distance to target in front of robot
                 target_distance = 4
                 for distance in data.ranges[-15:0] + data.ranges[0:15]:
                     if distance > 0:
                         target_distance = min(distance, target_distance)
 
-                print("target_distance: ", target_distance)
-
                 desired_target_distance = self.desired_obj_distance if self.goal == Goal.GO_TO_OBJECT else self.desired_tag_distance
                 distance_error = target_distance - desired_target_distance
 
+                # Only drive forward if the error in the number of pixels from the x-position of the image
+                #   center to the x-position of the target is below a certain threshold
                 if abs(target_center_x_error) < self.drive_error_pixels:
                     self.twist.linear.x = self.k_p_lin * distance_error
                 else:
                     self.twist.linear.x = 0
 
-                #within distance of obj => set at_object to true for next scan
+                # Mark arrival at the rough position of the object
                 if self.goal == Goal.GO_TO_OBJECT and abs(target_center_x_error) < self.obj_angle_tolerance and abs(distance_error) < self.obj_distance_tolerance:
                     self.at_object = True
                     return
                 
-                #closes enough to tag to put down obj
+                # Set the goal to put down upon arrival at the tag
                 if self.goal == Goal.GO_TO_TAG and abs(distance_error) < self.put_down_threshold:
-                    print('finished going to tag')
                     self.goal = Goal.PUT_DOWN
                     self.twist.linear.x = 0
                     self.twist.angular.z = 0
@@ -216,64 +212,66 @@ class PerformActions(object):
             # Publish Twist message to cmd_vel.
             self.move_pub.publish(self.twist)
 
-        
+    
+    # Compute and set center position of object target 
     def color_object_handler(self, img):
+
+        # Convert image to HSV and mask colors that don't correspond with the current target object color
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         lower_bound = np.array(self.color_dict_HSV[self.color][0])
         upper_bound = np.array(self.color_dict_HSV[self.color][1])
         mask = cv2.inRange(hsv, lower_bound, upper_bound)
 
-        #filter search scope of img
+        # Filter search scope of image
         h, w, d = img.shape
         search_left = int(w/3)
         search_right = int(2*w/3)
         mask[0:h, 0:search_left] = 0
         mask[0:h, search_right:w] = 0
         
-        # using moments() function, the center of the color pixels is determined
+        # Compute center of colored pixels
         M = cv2.moments(mask)
 
-        # if there are more than 10 specified color pixels found
+        # If there are more than 10 pixels found with the color of the target object, set the
+        #   x- and y- positions of the target center
         if M['m00'] > 10:
-                # center of the color pixels in the image
-                self.target_center_x = int(M['m10']/M['m00'])
-                self.target_center_y = int(M['m01']/M['m00'])
+            self.target_center_x = int(M['m10']/M['m00'])
+            self.target_center_y = int(M['m01']/M['m00'])
         
         else:
             self.target_center_x = None
             self.target_center_y = None
 
-        # shows the debugging window
-        # cv2.imshow("window", img)
-        # cv2.waitKey(3)
-    
+
+    # Compute and set center position of tag target
     def tag_handler(self, img):
 
-        # turn the image into a grayscale
+        # Convert image to grayscale
         grayscale_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
+        # Get target tags from the image
         aruco_dict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_4X4_50)
         corners, ids, rejected_points = cv2.aruco.detectMarkers(grayscale_img, aruco_dict)
         
         if ids is None:
             self.target_center_x = None
             self.target_center_y = None
-            print('no tags found')
             return
-
+        
+        # Find tags matching the current target tag index 
         ids = np.ndarray.flatten(ids)
         tag_idx = None
         for idx, id in enumerate(ids):
             if id == self.tag_id:
                 tag_idx = idx
 
+        # Set the target center positions to None if there are no tags maching the current target index
         if tag_idx is None:
             self.target_center_x = None
             self.target_center_y = None
-            print('no tag matches found')
             return
         
-        #get avg of x and y corner coords
+        # Get average of x- and y- corner coordinates
         x_coords = []
         y_coords = []
         for coord in corners[tag_idx][0]:
@@ -289,17 +287,19 @@ class PerformActions(object):
 
     # Process image before moving to tag or object
     def process_image(self, data):
-
+        
+        # Wait for receipt of a color and tag ID
         if self.color is None or self.tag_id is None:
-            print('waiting for color and/or tag ID')
             return
 
+        # Get image and set x- and y- center positions
         img = self.bridge.imgmsg_to_cv2(data, desired_encoding='bgr8')
 
         img_width, img_height, img_depth = img.shape
         self.img_center_x = img_width / 2
         self.img_center_y = img_height / 2
 
+        # Call the appopriate handler for the object or tag
         if self.goal == Goal.GO_TO_OBJECT:
             self.color_object_handler(img)
 
@@ -307,8 +307,10 @@ class PerformActions(object):
             self.tag_handler(img)
 
     
+    # Callback for actions sent by send_actions.py
     def perform_action(self, data):
 
+        # If an empty message is received, shut down the robot
         if data.robot_object == 'None':
             self.twist.linear.x = 0
             self.twist.angular.z = 0
@@ -319,38 +321,31 @@ class PerformActions(object):
         self.color = data.robot_object
         self.tag_id = data.tag_id
         
-        # Pick up object
+        # Pick up the object
         while not self.goal == Goal.PICK_UP:
             pass
-
         self.arm_action_pub.publish("pick_up")
-        print('started picking up')
         rospy.sleep(10)
         
-        #move back and rotate
+        # Back up, and then go to the tag
         self.backing_up = True
-        
-        #now want bot to go to tag
         self.goal = Goal.GO_TO_TAG
 
-        # Put down object
+        # Put down the object
         while not self.goal == Goal.PUT_DOWN:
             pass
-
         self.arm_action_pub.publish("put_down")
-        print('started putting down')
         rospy.sleep(10)
         
-        #move back and rotate
+        # Back up, and then go to the next object
         self.backing_up = True
-
-        #go to next colored object
         self.goal = Goal.GO_TO_OBJECT
 
-        #indication that bot completed action
+        # Indicate to send_actions.py that the bot has completed the requested action
         self.action_completion_pub.publish(data)
 
         
+    # Wait to receive actions
     def run(self):
         
         rospy.spin()
